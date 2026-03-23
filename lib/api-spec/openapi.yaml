@@ -1,15 +1,16 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Agricultural Trading Reconciliation API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: reconciliation
+    description: Reconciliation operations
 paths:
   /healthz:
     get:
@@ -24,6 +25,81 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /reconciliation/run:
+    post:
+      operationId: runReconciliation
+      tags: [reconciliation]
+      summary: Run reconciliation matching
+      description: Upload sales and purchase bill Excel files and run exact lot matching
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                salesFile:
+                  type: string
+                  format: binary
+                purchaseFile:
+                  type: string
+                  format: binary
+              required:
+                - salesFile
+                - purchaseFile
+      responses:
+        "200":
+          description: Reconciliation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reconciliation/download/{fileType}:
+    post:
+      operationId: downloadFile
+      tags: [reconciliation]
+      summary: Download reconciliation output file
+      description: Returns an Excel file for the specified output type
+      parameters:
+        - name: fileType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - updated-sales
+              - pending-pavati
+              - datewise-report
+              - purchase-exceptions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconciliationResult"
+      responses:
+        "200":
+          description: Excel file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +110,123 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SaleRow:
+      type: object
+      properties:
+        saleDate:
+          type: string
+          description: Sale date (ISO string)
+        item:
+          type: string
+        qty:
+          type: number
+        rate:
+          type: number
+        amount:
+          type: number
+        purchaseBillDate:
+          type: string
+          nullable: true
+          description: Matched purchase bill date or null
+        status:
+          type: string
+          enum: [Matched, Pending]
+      required:
+        - saleDate
+        - item
+        - qty
+        - rate
+        - amount
+        - status
+
+    PurchaseRow:
+      type: object
+      properties:
+        billDate:
+          type: string
+          description: Bill / payment date (ISO string)
+        purchaseDate:
+          type: string
+          description: Original purchase date (ISO string)
+        item:
+          type: string
+        qty:
+          type: number
+        rate:
+          type: number
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [Matched, Unmatched, Extra]
+      required:
+        - billDate
+        - purchaseDate
+        - item
+        - qty
+        - rate
+        - amount
+        - status
+
+    ItemSummary:
+      type: object
+      properties:
+        item:
+          type: string
+        salesQty:
+          type: number
+        salesAmount:
+          type: number
+        purchaseQty:
+          type: number
+        purchaseAmount:
+          type: number
+        pendingQty:
+          type: number
+        pendingAmount:
+          type: number
+      required:
+        - item
+        - salesQty
+        - salesAmount
+        - purchaseQty
+        - purchaseAmount
+        - pendingQty
+        - pendingAmount
+
+    ReconciliationResult:
+      type: object
+      properties:
+        salesRows:
+          type: array
+          items:
+            $ref: "#/components/schemas/SaleRow"
+        purchaseRows:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseRow"
+        summary:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+        matchedCount:
+          type: integer
+        pendingCount:
+          type: integer
+        unmatchedPurchaseCount:
+          type: integer
+      required:
+        - salesRows
+        - purchaseRows
+        - summary
+        - matchedCount
+        - pendingCount
+        - unmatchedPurchaseCount

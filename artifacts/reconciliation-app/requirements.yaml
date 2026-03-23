@@ -1,0 +1,11 @@
+packages:
+  "framer-motion": "For page transitions and smooth reveal animations of the reconciliation results"
+  "react-dropzone": "For creating intuitive, drag-and-drop file upload areas for the Excel files"
+  "clsx": "Utility for conditionally joining class names"
+  "tailwind-merge": "Utility to efficiently merge Tailwind classes without style conflicts"
+  "lucide-react": "For crisp, professional icons throughout the interface"
+
+images:
+  - path: "artifacts/reconciliation-app/public/images/agri-hero-bg.png"
+    description: "Subtle abstract geometric background pattern in light off-white and very pale green, suggesting organized agricultural fields from above, extremely minimal, clean enterprise feel"
+    aspect_ratio: "16:9"
