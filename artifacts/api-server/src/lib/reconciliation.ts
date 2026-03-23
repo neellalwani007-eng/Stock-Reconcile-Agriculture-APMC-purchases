@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 
 export interface SaleRow {
+  id?: number;
   saleDate: string;
   item: string;
   qty: number;
@@ -11,6 +12,7 @@ export interface SaleRow {
 }
 
 export interface PurchaseRow {
+  id?: number;
   billDate: string;
   purchaseDate: string;
   item: string;
@@ -37,6 +39,12 @@ export interface ReconciliationResult {
   matchedCount: number;
   pendingCount: number;
   unmatchedPurchaseCount: number;
+}
+
+export interface MatchUpdate {
+  saleId: number;
+  purchaseId: number;
+  purchaseBillDate: string;
 }
 
 function normalizeDate(val: unknown): string {
@@ -83,7 +91,7 @@ function normalizeStr(val: unknown): string {
   return String(val).trim().toLowerCase();
 }
 
-function headerMap(headers: string[]): Record<string, number> {
+function headerMap(headers: unknown[]): Record<string, number> {
   const map: Record<string, number> = {};
   headers.forEach((h, i) => {
     if (h !== undefined && h !== null) {
@@ -100,29 +108,31 @@ function findCol(hm: Record<string, number>, ...candidates: string[]): number {
   return -1;
 }
 
-export function parseSalesSheet(buffer: Buffer): SaleRow[] {
+export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: false });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const raw = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: true });
+  const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true });
   if (raw.length < 2) return [];
 
-  const hm = headerMap(raw[0] as string[]);
+  const hm = headerMap(raw[0] as unknown[]);
   const datecol = findCol(hm, "sale date", "saledate", "date");
   const itemcol = findCol(hm, "item", "commodity", "product", "name");
-  const qtycol = findCol(hm, "qty", "quantity", "qtl", "qtl.", "qty (qtl)");
+  const qtycol = findCol(hm, "qty", "quantity", "qtl", "qty (qtl)");
   const ratecol = findCol(hm, "rate", "price");
   const amtcol = findCol(hm, "amount", "amt", "total");
 
-  const rows: SaleRow[] = [];
+  const rows: Omit<SaleRow, "id">[] = [];
   for (let i = 1; i < raw.length; i++) {
     const r = raw[i] as unknown[];
     if (!r || r.length === 0) continue;
     const item = normalizeStr(r[itemcol]);
     if (!item) continue;
+    const qty = normalizeNum(r[qtycol]);
+    if (qty === 0) continue;
     rows.push({
       saleDate: normalizeDate(r[datecol]),
       item: String(r[itemcol] ?? "").trim(),
-      qty: normalizeNum(r[qtycol]),
+      qty,
       rate: normalizeNum(r[ratecol]),
       amount: normalizeNum(r[amtcol]),
       purchaseBillDate: null,
@@ -132,31 +142,33 @@ export function parseSalesSheet(buffer: Buffer): SaleRow[] {
   return rows;
 }
 
-export function parsePurchaseSheet(buffer: Buffer): PurchaseRow[] {
+export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: false });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const raw = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: true });
+  const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true });
   if (raw.length < 2) return [];
 
-  const hm = headerMap(raw[0] as string[]);
+  const hm = headerMap(raw[0] as unknown[]);
   const billdatecol = findCol(hm, "date", "bill date", "billdate", "payment date");
   const purdatecol = findCol(hm, "purchase date", "purchasedate", "original purchase date", "orig date");
   const itemcol = findCol(hm, "item", "commodity", "product", "name");
-  const qtycol = findCol(hm, "qty", "quantity", "qtl", "qtl.", "qty (qtl)");
+  const qtycol = findCol(hm, "qty", "quantity", "qtl", "qty (qtl)");
   const ratecol = findCol(hm, "rate", "price");
   const amtcol = findCol(hm, "amount", "amt", "total");
 
-  const rows: PurchaseRow[] = [];
+  const rows: Omit<PurchaseRow, "id">[] = [];
   for (let i = 1; i < raw.length; i++) {
     const r = raw[i] as unknown[];
     if (!r || r.length === 0) continue;
     const item = normalizeStr(r[itemcol]);
     if (!item) continue;
+    const qty = normalizeNum(r[qtycol]);
+    if (qty === 0) continue;
     rows.push({
       billDate: normalizeDate(r[billdatecol]),
       purchaseDate: normalizeDate(r[purdatecol]),
       item: String(r[itemcol] ?? "").trim(),
-      qty: normalizeNum(r[qtycol]),
+      qty,
       rate: normalizeNum(r[ratecol]),
       amount: normalizeNum(r[amtcol]),
       status: "Unmatched",
@@ -169,45 +181,53 @@ function exactKey(qty: number, rate: number, amount: number): string {
   return `${qty}|${rate}|${amount}`;
 }
 
+/**
+ * Run exact 1-to-1 matching between pending sales and unmatched purchases.
+ * Returns a list of match pairs (saleId, purchaseId, purchaseBillDate).
+ * Mutates salesRows and purchaseRows in-place to update status/purchaseBillDate.
+ */
 export function runMatching(
   salesRows: SaleRow[],
   purchaseRows: PurchaseRow[]
-): ReconciliationResult {
+): { updates: MatchUpdate[] } {
   const purchaseUsed = new Set<number>();
+  const updates: MatchUpdate[] = [];
 
   for (const sale of salesRows) {
+    if (sale.status === "Matched") continue;
     const saleItemNorm = normalizeStr(sale.item);
-    const saleDateNorm = sale.saleDate;
     const saleKey = exactKey(sale.qty, sale.rate, sale.amount);
 
     for (let pi = 0; pi < purchaseRows.length; pi++) {
       if (purchaseUsed.has(pi)) continue;
       const pur = purchaseRows[pi];
+      if (pur.status === "Matched") continue;
       if (normalizeStr(pur.item) !== saleItemNorm) continue;
-      if (pur.purchaseDate !== saleDateNorm) continue;
+      if (pur.purchaseDate !== sale.saleDate) continue;
       if (exactKey(pur.qty, pur.rate, pur.amount) !== saleKey) continue;
 
       sale.purchaseBillDate = pur.billDate;
       sale.status = "Matched";
       purchaseRows[pi].status = "Matched";
       purchaseUsed.add(pi);
+
+      if (sale.id !== undefined && pur.id !== undefined) {
+        updates.push({ saleId: sale.id, purchaseId: pur.id, purchaseBillDate: pur.billDate });
+      }
       break;
     }
   }
 
+  return { updates };
+}
+
+export function buildSummary(salesRows: SaleRow[], purchaseRows: PurchaseRow[]): ItemSummary[] {
   const summaryMap: Record<string, ItemSummary> = {};
+
   for (const s of salesRows) {
     const key = normalizeStr(s.item);
     if (!summaryMap[key]) {
-      summaryMap[key] = {
-        item: s.item,
-        salesQty: 0,
-        salesAmount: 0,
-        purchaseQty: 0,
-        purchaseAmount: 0,
-        pendingQty: 0,
-        pendingAmount: 0,
-      };
+      summaryMap[key] = { item: s.item, salesQty: 0, salesAmount: 0, purchaseQty: 0, purchaseAmount: 0, pendingQty: 0, pendingAmount: 0 };
     }
     summaryMap[key].salesQty += s.qty;
     summaryMap[key].salesAmount += s.amount;
@@ -216,34 +236,28 @@ export function runMatching(
       summaryMap[key].pendingAmount += s.amount;
     }
   }
+
   for (const p of purchaseRows) {
     const key = normalizeStr(p.item);
     if (!summaryMap[key]) {
-      summaryMap[key] = {
-        item: p.item,
-        salesQty: 0,
-        salesAmount: 0,
-        purchaseQty: 0,
-        purchaseAmount: 0,
-        pendingQty: 0,
-        pendingAmount: 0,
-      };
+      summaryMap[key] = { item: p.item, salesQty: 0, salesAmount: 0, purchaseQty: 0, purchaseAmount: 0, pendingQty: 0, pendingAmount: 0 };
     }
     summaryMap[key].purchaseQty += p.qty;
     summaryMap[key].purchaseAmount += p.amount;
   }
 
-  const matchedCount = salesRows.filter((s) => s.status === "Matched").length;
-  const pendingCount = salesRows.filter((s) => s.status === "Pending").length;
-  const unmatchedPurchaseCount = purchaseRows.filter((p) => p.status !== "Matched").length;
+  return Object.values(summaryMap);
+}
 
+export function buildResult(salesRows: SaleRow[], purchaseRows: PurchaseRow[]): ReconciliationResult {
+  const summary = buildSummary(salesRows, purchaseRows);
   return {
     salesRows,
     purchaseRows,
-    summary: Object.values(summaryMap),
-    matchedCount,
-    pendingCount,
-    unmatchedPurchaseCount,
+    summary,
+    matchedCount: salesRows.filter((s) => s.status === "Matched").length,
+    pendingCount: salesRows.filter((s) => s.status === "Pending").length,
+    unmatchedPurchaseCount: purchaseRows.filter((p) => p.status !== "Matched").length,
   };
 }
 
@@ -251,18 +265,9 @@ export function buildUpdatedSalesExcel(result: ReconciliationResult): Buffer {
   const wb = XLSX.utils.book_new();
   const data = [
     ["Sale Date", "Item", "Qty (QTL)", "Rate", "Amount", "Purchase Bill Date", "Status"],
-    ...result.salesRows.map((r) => [
-      r.saleDate,
-      r.item,
-      r.qty,
-      r.rate,
-      r.amount,
-      r.purchaseBillDate ?? "",
-      r.status,
-    ]),
+    ...result.salesRows.map((r) => [r.saleDate, r.item, r.qty, r.rate, r.amount, r.purchaseBillDate ?? "", r.status]),
   ];
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  XLSX.utils.book_append_sheet(wb, ws, "Updated Sales");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Updated Sales");
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
 }
 
@@ -273,27 +278,18 @@ export function buildPendingPavatiExcel(result: ReconciliationResult): Buffer {
     ["Sale Date", "Commodity", "Quantity (QTL)", "Rate", "Amount"],
     ...pending.map((r) => [r.saleDate, r.item, r.qty, r.rate, r.amount]),
   ];
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  XLSX.utils.book_append_sheet(wb, ws, "Pending Pavati");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Pending Pavati");
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
 }
 
 export function buildDatewiseReportExcel(result: ReconciliationResult): Buffer {
   const wb = XLSX.utils.book_new();
+  const sorted = [...result.salesRows].sort((a, b) => a.saleDate.localeCompare(b.saleDate));
   const data = [
     ["Sale Date", "Commodity", "Qty (QTL)", "Rate", "Amount", "Purchase Bill Date", "Status"],
-    ...result.salesRows.map((r) => [
-      r.saleDate,
-      r.item,
-      r.qty,
-      r.rate,
-      r.amount,
-      r.purchaseBillDate ?? "",
-      r.status,
-    ]),
+    ...sorted.map((r) => [r.saleDate, r.item, r.qty, r.rate, r.amount, r.purchaseBillDate ?? "", r.status]),
   ];
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  XLSX.utils.book_append_sheet(wb, ws, "Date-wise Report");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Date-wise Report");
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
 }
 
@@ -304,7 +300,6 @@ export function buildPurchaseExceptionsExcel(result: ReconciliationResult): Buff
     ["Bill Date", "Purchase Date", "Commodity", "Qty (QTL)", "Rate", "Amount", "Status"],
     ...exceptions.map((r) => [r.billDate, r.purchaseDate, r.item, r.qty, r.rate, r.amount, r.status]),
   ];
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  XLSX.utils.book_append_sheet(wb, ws, "Purchase Exceptions");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Purchase Exceptions");
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
 }

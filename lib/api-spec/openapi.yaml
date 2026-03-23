@@ -17,7 +17,6 @@ paths:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -31,7 +30,7 @@ paths:
       operationId: runReconciliation
       tags: [reconciliation]
       summary: Run reconciliation matching
-      description: Upload sales and purchase bill Excel files and run exact lot matching
+      description: Upload sales (optional) and purchase bill Excel files. Matches against all saved sales in DB.
       requestBody:
         required: true
         content:
@@ -42,11 +41,12 @@ paths:
                 salesFile:
                   type: string
                   format: binary
+                  description: Sales Excel file (optional - can upload purchase only)
                 purchaseFile:
                   type: string
                   format: binary
+                  description: Purchase Bill Excel file
               required:
-                - salesFile
                 - purchaseFile
       responses:
         "200":
@@ -62,12 +62,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /reconciliation/reports:
+    get:
+      operationId: getReports
+      tags: [reconciliation]
+      summary: Get all saved reconciliation records from database
+      description: Returns the full current state of all saved sales and purchase records
+      responses:
+        "200":
+          description: Full reconciliation state from database
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationResult"
+
+  /reconciliation/records:
+    delete:
+      operationId: deleteRecords
+      tags: [reconciliation]
+      summary: Delete all reconciliation records (password-protected)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteRequest"
+      responses:
+        "200":
+          description: Records deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          description: Wrong password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /reconciliation/download/{fileType}:
     post:
       operationId: downloadFile
       tags: [reconciliation]
       summary: Download reconciliation output file
-      description: Returns an Excel file for the specified output type
       parameters:
         - name: fileType
           in: path
@@ -118,12 +156,36 @@ components:
       required:
         - error
 
+    DeleteRequest:
+      type: object
+      properties:
+        password:
+          type: string
+      required:
+        - password
+
+    DeleteResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        deletedSales:
+          type: integer
+        deletedPurchases:
+          type: integer
+      required:
+        - message
+        - deletedSales
+        - deletedPurchases
+
     SaleRow:
       type: object
       properties:
+        id:
+          type: integer
+          description: Database record ID
         saleDate:
           type: string
-          description: Sale date (ISO string)
         item:
           type: string
         qty:
@@ -135,7 +197,6 @@ components:
         purchaseBillDate:
           type: string
           nullable: true
-          description: Matched purchase bill date or null
         status:
           type: string
           enum: [Matched, Pending]
@@ -150,12 +211,13 @@ components:
     PurchaseRow:
       type: object
       properties:
+        id:
+          type: integer
+          description: Database record ID
         billDate:
           type: string
-          description: Bill / payment date (ISO string)
         purchaseDate:
           type: string
-          description: Original purchase date (ISO string)
         item:
           type: string
         qty:

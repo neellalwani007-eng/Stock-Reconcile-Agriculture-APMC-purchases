@@ -13,6 +13,16 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface DeleteRequest {
+  password: string;
+}
+
+export interface DeleteResponse {
+  message: string;
+  deletedSales: number;
+  deletedPurchases: number;
+}
+
 export type SaleRowStatus = (typeof SaleRowStatus)[keyof typeof SaleRowStatus];
 
 export const SaleRowStatus = {
@@ -21,13 +31,13 @@ export const SaleRowStatus = {
 } as const;
 
 export interface SaleRow {
-  /** Sale date (ISO string) */
+  /** Database record ID */
+  id?: number;
   saleDate: string;
   item: string;
   qty: number;
   rate: number;
   amount: number;
-  /** Matched purchase bill date or null */
   purchaseBillDate?: string | null;
   status: SaleRowStatus;
 }
@@ -42,9 +52,9 @@ export const PurchaseRowStatus = {
 } as const;
 
 export interface PurchaseRow {
-  /** Bill / payment date (ISO string) */
+  /** Database record ID */
+  id?: number;
   billDate: string;
-  /** Original purchase date (ISO string) */
   purchaseDate: string;
   item: string;
   qty: number;
@@ -73,6 +83,8 @@ export interface ReconciliationResult {
 }
 
 export type RunReconciliationBody = {
-  salesFile: Blob;
+  /** Sales Excel file (optional - can upload purchase only) */
+  salesFile?: Blob;
+  /** Purchase Bill Excel file */
   purchaseFile: Blob;
 };

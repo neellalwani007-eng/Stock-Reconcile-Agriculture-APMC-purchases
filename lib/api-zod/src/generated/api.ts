@@ -8,7 +8,6 @@
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -16,35 +15,35 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Upload sales and purchase bill Excel files and run exact lot matching
+ * Upload sales (optional) and purchase bill Excel files. Matches against all saved sales in DB.
  * @summary Run reconciliation matching
  */
 export const RunReconciliationBody = zod.object({
-  salesFile: zod.instanceof(File),
-  purchaseFile: zod.instanceof(File),
+  salesFile: zod
+    .instanceof(File)
+    .optional()
+    .describe("Sales Excel file (optional - can upload purchase only)"),
+  purchaseFile: zod.instanceof(File).describe("Purchase Bill Excel file"),
 });
 
 export const RunReconciliationResponse = zod.object({
   salesRows: zod.array(
     zod.object({
-      saleDate: zod.string().describe("Sale date (ISO string)"),
+      id: zod.number().optional().describe("Database record ID"),
+      saleDate: zod.string(),
       item: zod.string(),
       qty: zod.number(),
       rate: zod.number(),
       amount: zod.number(),
-      purchaseBillDate: zod
-        .string()
-        .nullish()
-        .describe("Matched purchase bill date or null"),
+      purchaseBillDate: zod.string().nullish(),
       status: zod.enum(["Matched", "Pending"]),
     }),
   ),
   purchaseRows: zod.array(
     zod.object({
-      billDate: zod.string().describe("Bill \/ payment date (ISO string)"),
-      purchaseDate: zod
-        .string()
-        .describe("Original purchase date (ISO string)"),
+      id: zod.number().optional().describe("Database record ID"),
+      billDate: zod.string(),
+      purchaseDate: zod.string(),
       item: zod.string(),
       qty: zod.number(),
       rate: zod.number(),
@@ -69,7 +68,64 @@ export const RunReconciliationResponse = zod.object({
 });
 
 /**
- * Returns an Excel file for the specified output type
+ * Returns the full current state of all saved sales and purchase records
+ * @summary Get all saved reconciliation records from database
+ */
+export const GetReportsResponse = zod.object({
+  salesRows: zod.array(
+    zod.object({
+      id: zod.number().optional().describe("Database record ID"),
+      saleDate: zod.string(),
+      item: zod.string(),
+      qty: zod.number(),
+      rate: zod.number(),
+      amount: zod.number(),
+      purchaseBillDate: zod.string().nullish(),
+      status: zod.enum(["Matched", "Pending"]),
+    }),
+  ),
+  purchaseRows: zod.array(
+    zod.object({
+      id: zod.number().optional().describe("Database record ID"),
+      billDate: zod.string(),
+      purchaseDate: zod.string(),
+      item: zod.string(),
+      qty: zod.number(),
+      rate: zod.number(),
+      amount: zod.number(),
+      status: zod.enum(["Matched", "Unmatched", "Extra"]),
+    }),
+  ),
+  summary: zod.array(
+    zod.object({
+      item: zod.string(),
+      salesQty: zod.number(),
+      salesAmount: zod.number(),
+      purchaseQty: zod.number(),
+      purchaseAmount: zod.number(),
+      pendingQty: zod.number(),
+      pendingAmount: zod.number(),
+    }),
+  ),
+  matchedCount: zod.number(),
+  pendingCount: zod.number(),
+  unmatchedPurchaseCount: zod.number(),
+});
+
+/**
+ * @summary Delete all reconciliation records (password-protected)
+ */
+export const DeleteRecordsBody = zod.object({
+  password: zod.string(),
+});
+
+export const DeleteRecordsResponse = zod.object({
+  message: zod.string(),
+  deletedSales: zod.number(),
+  deletedPurchases: zod.number(),
+});
+
+/**
  * @summary Download reconciliation output file
  */
 export const DownloadFileParams = zod.object({
@@ -84,24 +140,21 @@ export const DownloadFileParams = zod.object({
 export const DownloadFileBody = zod.object({
   salesRows: zod.array(
     zod.object({
-      saleDate: zod.string().describe("Sale date (ISO string)"),
+      id: zod.number().optional().describe("Database record ID"),
+      saleDate: zod.string(),
       item: zod.string(),
       qty: zod.number(),
       rate: zod.number(),
       amount: zod.number(),
-      purchaseBillDate: zod
-        .string()
-        .nullish()
-        .describe("Matched purchase bill date or null"),
+      purchaseBillDate: zod.string().nullish(),
       status: zod.enum(["Matched", "Pending"]),
     }),
   ),
   purchaseRows: zod.array(
     zod.object({
-      billDate: zod.string().describe("Bill \/ payment date (ISO string)"),
-      purchaseDate: zod
-        .string()
-        .describe("Original purchase date (ISO string)"),
+      id: zod.number().optional().describe("Database record ID"),
+      billDate: zod.string(),
+      purchaseDate: zod.string(),
       item: zod.string(),
       qty: zod.number(),
       rate: zod.number(),

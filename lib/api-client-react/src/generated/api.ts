@@ -17,6 +17,8 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  DeleteRequest,
+  DeleteResponse,
   ErrorResponse,
   HealthStatus,
   ReconciliationResult,
@@ -33,7 +35,6 @@ type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const getHealthCheckUrl = () => {
@@ -109,7 +110,7 @@ export function useHealthCheck<
 }
 
 /**
- * Upload sales and purchase bill Excel files and run exact lot matching
+ * Upload sales (optional) and purchase bill Excel files. Matches against all saved sales in DB.
  * @summary Run reconciliation matching
  */
 export const getRunReconciliationUrl = () => {
@@ -121,7 +122,9 @@ export const runReconciliation = async (
   options?: RequestInit,
 ): Promise<ReconciliationResult> => {
   const formData = new FormData();
-  formData.append(`salesFile`, runReconciliationBody.salesFile);
+  if (runReconciliationBody.salesFile !== undefined) {
+    formData.append(`salesFile`, runReconciliationBody.salesFile);
+  }
   formData.append(`purchaseFile`, runReconciliationBody.purchaseFile);
 
   return customFetch<ReconciliationResult>(getRunReconciliationUrl(), {
@@ -199,7 +202,168 @@ export const useRunReconciliation = <
 };
 
 /**
- * Returns an Excel file for the specified output type
+ * Returns the full current state of all saved sales and purchase records
+ * @summary Get all saved reconciliation records from database
+ */
+export const getGetReportsUrl = () => {
+  return `/api/reconciliation/reports`;
+};
+
+export const getReports = async (
+  options?: RequestInit,
+): Promise<ReconciliationResult> => {
+  return customFetch<ReconciliationResult>(getGetReportsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetReportsQueryKey = () => {
+  return [`/api/reconciliation/reports`] as const;
+};
+
+export const getGetReportsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getReports>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getReports>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetReportsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getReports>>> = ({
+    signal,
+  }) => getReports({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getReports>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetReportsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getReports>>
+>;
+export type GetReportsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get all saved reconciliation records from database
+ */
+
+export function useGetReports<
+  TData = Awaited<ReturnType<typeof getReports>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getReports>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetReportsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Delete all reconciliation records (password-protected)
+ */
+export const getDeleteRecordsUrl = () => {
+  return `/api/reconciliation/records`;
+};
+
+export const deleteRecords = async (
+  deleteRequest: DeleteRequest,
+  options?: RequestInit,
+): Promise<DeleteResponse> => {
+  return customFetch<DeleteResponse>(getDeleteRecordsUrl(), {
+    ...options,
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(deleteRequest),
+  });
+};
+
+export const getDeleteRecordsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRecords>>,
+    TError,
+    { data: BodyType<DeleteRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteRecords>>,
+  TError,
+  { data: BodyType<DeleteRequest> },
+  TContext
+> => {
+  const mutationKey = ["deleteRecords"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteRecords>>,
+    { data: BodyType<DeleteRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return deleteRecords(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteRecordsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteRecords>>
+>;
+export type DeleteRecordsMutationBody = BodyType<DeleteRequest>;
+export type DeleteRecordsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete all reconciliation records (password-protected)
+ */
+export const useDeleteRecords = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRecords>>,
+    TError,
+    { data: BodyType<DeleteRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteRecords>>,
+  TError,
+  { data: BodyType<DeleteRequest> },
+  TContext
+> => {
+  return useMutation(getDeleteRecordsMutationOptions(options));
+};
+
+/**
  * @summary Download reconciliation output file
  */
 export const getDownloadFileUrl = (

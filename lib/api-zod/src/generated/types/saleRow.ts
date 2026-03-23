@@ -8,13 +8,13 @@
 import type { SaleRowStatus } from "./saleRowStatus";
 
 export interface SaleRow {
-  /** Sale date (ISO string) */
+  /** Database record ID */
+  id?: number;
   saleDate: string;
   item: string;
   qty: number;
   rate: number;
   amount: number;
-  /** Matched purchase bill date or null */
   purchaseBillDate?: string | null;
   status: SaleRowStatus;
 }

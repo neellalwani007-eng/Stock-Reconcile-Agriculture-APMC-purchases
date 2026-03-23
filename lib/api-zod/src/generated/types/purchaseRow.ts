@@ -8,9 +8,9 @@
 import type { PurchaseRowStatus } from "./purchaseRowStatus";
 
 export interface PurchaseRow {
-  /** Bill / payment date (ISO string) */
+  /** Database record ID */
+  id?: number;
   billDate: string;
-  /** Original purchase date (ISO string) */
   purchaseDate: string;
   item: string;
   qty: number;

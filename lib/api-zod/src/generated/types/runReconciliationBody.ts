@@ -7,6 +7,8 @@
  */
 
 export type RunReconciliationBody = {
-  salesFile: Blob;
+  /** Sales Excel file (optional - can upload purchase only) */
+  salesFile?: Blob;
+  /** Purchase Bill Excel file */
   purchaseFile: Blob;
 };
