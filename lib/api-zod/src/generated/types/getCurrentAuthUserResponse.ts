@@ -5,7 +5,8 @@
  * Stock Reconciler API
  * OpenAPI spec version: 0.1.0
  */
+import type { AuthUser } from "./authUser";
 
-export interface ErrorResponse {
-  error: string;
+export interface GetCurrentAuthUserResponse {
+  user: AuthUser | null;
 }

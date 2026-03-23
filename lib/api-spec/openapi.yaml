@@ -2,13 +2,15 @@ openapi: 3.1.0
 info:
   title: Api
   version: 0.1.0
-  description: Agricultural Trading Reconciliation API
+  description: Stock Reconciler API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
   - name: reconciliation
     description: Reconciliation operations
 paths:
@@ -25,12 +27,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /auth/user:
+    get:
+      operationId: getCurrentAuthUser
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Current auth state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetCurrentAuthUserResponse"
+
   /reconciliation/run:
     post:
       operationId: runReconciliation
       tags: [reconciliation]
-      summary: Run reconciliation matching
-      description: Upload sales (optional) and purchase bill Excel files. Matches against all saved sales in DB.
+      summary: Upload file(s) and run strict lot matching
       requestBody:
         required: true
         content:
@@ -41,13 +55,9 @@ paths:
                 salesFile:
                   type: string
                   format: binary
-                  description: Sales Excel file (optional - can upload purchase only)
                 purchaseFile:
                   type: string
                   format: binary
-                  description: Purchase Bill Excel file
-              required:
-                - purchaseFile
       responses:
         "200":
           description: Reconciliation result
@@ -61,51 +71,150 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
-  /reconciliation/reports:
-    get:
-      operationId: getReports
-      tags: [reconciliation]
-      summary: Get all saved reconciliation records from database
-      description: Returns the full current state of all saved sales and purchase records
-      responses:
-        "200":
-          description: Full reconciliation state from database
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReconciliationResult"
-
-  /reconciliation/records:
-    delete:
-      operationId: deleteRecords
-      tags: [reconciliation]
-      summary: Delete all reconciliation records (password-protected)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DeleteRequest"
-      responses:
-        "200":
-          description: Records deleted successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DeleteResponse"
         "401":
-          description: Wrong password
+          description: Unauthorized
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /reconciliation/reports:
+    get:
+      operationId: getReports
+      tags: [reconciliation]
+      summary: Get all saved records for current user
+      responses:
+        "200":
+          description: Full reconciliation state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationResult"
+
+  /reconciliation/records/sale:
+    post:
+      operationId: addSaleRecord
+      tags: [reconciliation]
+      summary: Add a single sale record manually
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualSaleInput"
+      responses:
+        "200":
+          description: Record added, returns updated result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reconciliation/records/purchase:
+    post:
+      operationId: addPurchaseRecord
+      tags: [reconciliation]
+      summary: Add a single purchase record manually
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualPurchaseInput"
+      responses:
+        "200":
+          description: Record added, returns updated result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reconciliation/records/sale/{id}:
+    delete:
+      operationId: deleteSaleRecord
+      tags: [reconciliation]
+      summary: Delete a specific sale record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Record deleted, returns updated result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reconciliation/records/purchase/{id}:
+    delete:
+      operationId: deletePurchaseRecord
+      tags: [reconciliation]
+      summary: Delete a specific purchase record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Record deleted, returns updated result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reconciliation/records/date:
+    delete:
+      operationId: deleteByDate
+      tags: [reconciliation]
+      summary: Delete all records for a specific date (sales or purchases)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteByDateRequest"
+      responses:
+        "200":
+          description: Records deleted, returns updated result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationResult"
+
   /reconciliation/download/{fileType}:
     post:
       operationId: downloadFile
       tags: [reconciliation]
-      summary: Download reconciliation output file
+      summary: Download a reconciliation report as Excel
       parameters:
         - name: fileType
           in: path
@@ -131,12 +240,6 @@ paths:
               schema:
                 type: string
                 format: binary
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
@@ -145,45 +248,123 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
-      required:
-        - error
+      required: [error]
 
-    DeleteRequest:
+    AuthUser:
       type: object
       properties:
-        password:
+        id:
           type: string
-      required:
-        - password
+        email:
+          type: string
+          nullable: true
+        firstName:
+          type: string
+          nullable: true
+        lastName:
+          type: string
+          nullable: true
+        profileImageUrl:
+          type: string
+          nullable: true
+      required: [id]
 
-    DeleteResponse:
+    GetCurrentAuthUserResponse:
       type: object
       properties:
-        message:
+        user:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/AuthUser"
+            - type: "null"
+      required: [user]
+
+    ExchangeMobileAuthorizationCodeBody:
+      type: object
+      properties:
+        code:
           type: string
-        deletedSales:
-          type: integer
-        deletedPurchases:
-          type: integer
-      required:
-        - message
-        - deletedSales
-        - deletedPurchases
+        code_verifier:
+          type: string
+        redirect_uri:
+          type: string
+        state:
+          type: string
+        nonce:
+          type: string
+          nullable: true
+      required: [code, code_verifier, redirect_uri, state]
+
+    ExchangeMobileAuthorizationCodeResponse:
+      type: object
+      properties:
+        token:
+          type: string
+      required: [token]
+
+    LogoutMobileSessionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required: [success]
+
+    ManualSaleInput:
+      type: object
+      properties:
+        saleDate:
+          type: string
+          description: "ISO date string YYYY-MM-DD"
+        item:
+          type: string
+        qty:
+          type: number
+        rate:
+          type: number
+        amount:
+          type: number
+      required: [saleDate, item, qty, rate, amount]
+
+    ManualPurchaseInput:
+      type: object
+      properties:
+        billDate:
+          type: string
+        purchaseDate:
+          type: string
+        item:
+          type: string
+        qty:
+          type: number
+        rate:
+          type: number
+        amount:
+          type: number
+      required: [billDate, purchaseDate, item, qty, rate, amount]
+
+    DeleteByDateRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          description: "ISO date YYYY-MM-DD"
+        type:
+          type: string
+          enum: [sale, purchase]
+      required: [date, type]
 
     SaleRow:
       type: object
       properties:
         id:
           type: integer
-          description: Database record ID
         saleDate:
           type: string
         item:
@@ -200,20 +381,13 @@ components:
         status:
           type: string
           enum: [Matched, Pending]
-      required:
-        - saleDate
-        - item
-        - qty
-        - rate
-        - amount
-        - status
+      required: [saleDate, item, qty, rate, amount, status]
 
     PurchaseRow:
       type: object
       properties:
         id:
           type: integer
-          description: Database record ID
         billDate:
           type: string
         purchaseDate:
@@ -229,14 +403,7 @@ components:
         status:
           type: string
           enum: [Matched, Unmatched, Extra]
-      required:
-        - billDate
-        - purchaseDate
-        - item
-        - qty
-        - rate
-        - amount
-        - status
+      required: [billDate, purchaseDate, item, qty, rate, amount, status]
 
     ItemSummary:
       type: object
@@ -255,14 +422,7 @@ components:
           type: number
         pendingAmount:
           type: number
-      required:
-        - item
-        - salesQty
-        - salesAmount
-        - purchaseQty
-        - purchaseAmount
-        - pendingQty
-        - pendingAmount
+      required: [item, salesQty, salesAmount, purchaseQty, purchaseAmount, pendingQty, pendingAmount]
 
     ReconciliationResult:
       type: object
@@ -285,10 +445,4 @@ components:
           type: integer
         unmatchedPurchaseCount:
           type: integer
-      required:
-        - salesRows
-        - purchaseRows
-        - summary
-        - matchedCount
-        - pendingCount
-        - unmatchedPurchaseCount
+      required: [salesRows, purchaseRows, summary, matchedCount, pendingCount, unmatchedPurchaseCount]

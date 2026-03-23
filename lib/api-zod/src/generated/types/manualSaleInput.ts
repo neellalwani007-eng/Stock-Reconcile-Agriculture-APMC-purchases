@@ -5,15 +5,12 @@
  * Stock Reconciler API
  * OpenAPI spec version: 0.1.0
  */
-import type { PurchaseRowStatus } from "./purchaseRowStatus";
 
-export interface PurchaseRow {
-  id?: number;
-  billDate: string;
-  purchaseDate: string;
+export interface ManualSaleInput {
+  /** ISO date string YYYY-MM-DD */
+  saleDate: string;
   item: string;
   qty: number;
   rate: number;
   amount: number;
-  status: PurchaseRowStatus;
 }
