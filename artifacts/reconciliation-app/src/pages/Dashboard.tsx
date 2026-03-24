@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRightLeft,
@@ -41,6 +41,10 @@ async function apiFetch(path: string, opts?: RequestInit) {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: "Request failed" }));
+    if (res.status === 401 && body.error === "reauth_required") {
+      window.location.href = `${BASE}/api/login`;
+      return new Promise<ReconciliationResult>(() => {});
+    }
     throw new Error(body.error || "Request failed");
   }
   return res.json() as Promise<ReconciliationResult>;
@@ -769,9 +773,17 @@ export default function Dashboard() {
   const [selectedFY, setSelectedFY] = useState<string>(getCurrentFY());
   const availableFYs = getAvailableFYs();
 
-  const { data: reportsData, isLoading: reportsLoading, refetch: refetchReports } = useGetReports({
+  const { data: reportsData, isLoading: reportsLoading, refetch: refetchReports, error: reportsError } = useGetReports({
     query: { enabled: appMode === "reports" },
   });
+
+  useEffect(() => {
+    if (!reportsError) return;
+    const e = reportsError as { status?: number; data?: { error?: string } };
+    if (e.status === 401 && e.data?.error === "reauth_required") {
+      window.location.href = `${BASE}/api/login`;
+    }
+  }, [reportsError]);
 
   const [liveReportsData, setLiveReportsData] = useState<ReconciliationResult | null>(null);
 
@@ -793,6 +805,10 @@ export default function Dashboard() {
         body: formData,
       });
       const data = await res.json();
+      if (res.status === 401 && data.error === "reauth_required") {
+        window.location.href = `${BASE}/api/login`;
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Upload failed");
       setUploadResult(data);
     } catch (e) {

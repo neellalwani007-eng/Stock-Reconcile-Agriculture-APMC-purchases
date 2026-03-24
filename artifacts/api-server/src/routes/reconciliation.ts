@@ -16,6 +16,7 @@ import {
 import {
   readUserData,
   writeUserData,
+  DriveInsufficientScopeError,
   type DriveUserData,
   type DrSaleRecord,
   type DrPurchaseRecord,
@@ -27,6 +28,14 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
 });
+
+function handleDriveError(err: unknown, res: Response, fallbackMsg: string): void {
+  if (err instanceof DriveInsufficientScopeError) {
+    res.status(401).json({ error: "reauth_required", message: err.message });
+  } else {
+    res.status(500).json({ error: fallbackMsg });
+  }
+}
 
 // Merge rows from multiple files
 function parseSalesFiles(
@@ -254,9 +263,7 @@ router.post(
       res.json(result);
     } catch (err) {
       req.log.error({ err }, "Reconciliation run failed");
-      res
-        .status(400)
-        .json({ error: "Failed to process files. Ensure they are valid Excel files." });
+      handleDriveError(err, res, "Failed to process files. Ensure they are valid Excel files.");
     }
   },
 );
@@ -281,7 +288,7 @@ router.get("/reports", async (req: Request, res: Response) => {
     );
   } catch (err) {
     req.log.error({ err }, "Failed to load reports from Drive");
-    res.status(500).json({ error: "Failed to load reports from Google Drive." });
+    handleDriveError(err, res, "Failed to load reports from Google Drive.");
   }
 });
 
@@ -325,7 +332,7 @@ router.post("/records/sale", async (req: Request, res: Response) => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Failed to add sale record");
-    res.status(500).json({ error: "Failed to add sale record." });
+    handleDriveError(err, res, "Failed to add sale record.");
   }
 });
 
@@ -371,7 +378,7 @@ router.post("/records/purchase", async (req: Request, res: Response) => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Failed to add purchase record");
-    res.status(500).json({ error: "Failed to add purchase record." });
+    handleDriveError(err, res, "Failed to add purchase record.");
   }
 });
 
@@ -417,7 +424,7 @@ router.delete("/records/sale/:id", async (req: Request, res: Response) => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Failed to delete sale record");
-    res.status(500).json({ error: "Failed to delete sale record." });
+    handleDriveError(err, res, "Failed to delete sale record.");
   }
 });
 
@@ -451,7 +458,7 @@ router.delete(
       res.json(result);
     } catch (err) {
       req.log.error({ err }, "Failed to delete purchase record");
-      res.status(500).json({ error: "Failed to delete purchase record." });
+      handleDriveError(err, res, "Failed to delete purchase record.");
     }
   },
 );
@@ -486,7 +493,7 @@ router.delete("/records/date", async (req: Request, res: Response) => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Failed to delete records by date");
-    res.status(500).json({ error: "Failed to delete records." });
+    handleDriveError(err, res, "Failed to delete records.");
   }
 });
 
@@ -562,7 +569,7 @@ router.post("/download/:fileType", async (req: Request, res: Response) => {
     res.send(buffer);
   } catch (err) {
     req.log.error({ err }, "Download failed");
-    res.status(400).json({ error: "Failed to generate download file." });
+    handleDriveError(err, res, "Failed to generate download file.");
   }
 });
 

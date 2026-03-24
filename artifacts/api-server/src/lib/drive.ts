@@ -3,6 +3,28 @@ import type { SessionData } from "./auth.js";
 
 const DRIVE_FILE_NAME = "stock-reconciler-data.json";
 
+export class DriveInsufficientScopeError extends Error {
+  constructor() {
+    super("Google Drive permission not granted. Please sign in again.");
+    this.name = "DriveInsufficientScopeError";
+  }
+}
+
+function isInsufficientScopeError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as Record<string, unknown>;
+  if (e["code"] === 403 || e["status"] === 403) {
+    const response = e["response"] as Record<string, unknown> | undefined;
+    const data = response?.["data"] as Record<string, unknown> | undefined;
+    const error = data?.["error"] as Record<string, unknown> | undefined;
+    const reason = (error?.["status"] as string) ?? "";
+    if (reason === "PERMISSION_DENIED") return true;
+    const details = error?.["details"] as Array<Record<string, unknown>> | undefined;
+    if (details?.some((d) => d["reason"] === "ACCESS_TOKEN_SCOPE_INSUFFICIENT")) return true;
+  }
+  return false;
+}
+
 function toTitleCase(str: string): string {
   return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -67,31 +89,41 @@ export function createDriveClient(
 async function findOrCreateFile(
   drive: ReturnType<typeof google.drive>,
 ): Promise<string> {
-  const list = await drive.files.list({
-    spaces: "appDataFolder",
-    q: `name = '${DRIVE_FILE_NAME}' and trashed = false`,
-    fields: "files(id)",
-    pageSize: 1,
-  });
+  let list;
+  try {
+    list = await drive.files.list({
+      spaces: "appDataFolder",
+      q: `name = '${DRIVE_FILE_NAME}' and trashed = false`,
+      fields: "files(id)",
+      pageSize: 1,
+    });
+  } catch (err) {
+    if (isInsufficientScopeError(err)) throw new DriveInsufficientScopeError();
+    throw err;
+  }
 
   if (list.data.files && list.data.files.length > 0) {
     return list.data.files[0].id!;
   }
 
-  const created = await drive.files.create({
-    requestBody: {
-      name: DRIVE_FILE_NAME,
-      parents: ["appDataFolder"],
-      mimeType: "application/json",
-    },
-    media: {
-      mimeType: "application/json",
-      body: JSON.stringify(EMPTY_DATA),
-    },
-    fields: "id",
-  });
-
-  return created.data.id!;
+  try {
+    const created = await drive.files.create({
+      requestBody: {
+        name: DRIVE_FILE_NAME,
+        parents: ["appDataFolder"],
+        mimeType: "application/json",
+      },
+      media: {
+        mimeType: "application/json",
+        body: JSON.stringify(EMPTY_DATA),
+      },
+      fields: "id",
+    });
+    return created.data.id!;
+  } catch (err) {
+    if (isInsufficientScopeError(err)) throw new DriveInsufficientScopeError();
+    throw err;
+  }
 }
 
 export async function readUserData(
