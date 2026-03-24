@@ -146,6 +146,7 @@ function DeleteByDateModal({
   const [date, setDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   const dates = type === "sale" ? salesDates : purchaseDates;
 
@@ -160,7 +161,8 @@ function DeleteByDateModal({
         body: JSON.stringify({ date, type }),
       });
       onSuccess(data);
-      onClose();
+      setSuccessMsg(`Records for ${formatDate(date)} deleted successfully.`);
+      setDate("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");
     } finally {
@@ -221,6 +223,11 @@ function DeleteByDateModal({
               <p className="text-xs text-muted-foreground">No {type} dates available.</p>
             )}
           </div>
+          {successMsg && (
+            <p className="text-sm text-green-400 flex items-center space-x-1">
+              <span>✓</span><span>{successMsg}</span>
+            </p>
+          )}
           {error && (
             <p className="text-sm text-destructive flex items-center space-x-1">
               <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -230,7 +237,7 @@ function DeleteByDateModal({
         </div>
         <div className="flex space-x-3 p-6 pt-0">
           <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">
-            Cancel
+            Close
           </button>
           <button
             onClick={handleDelete}
@@ -252,6 +259,7 @@ function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
   const [amountManual, setAmountManual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   const handleFieldChange = (key: string, value: string) => {
     setForm((f) => {
@@ -291,7 +299,9 @@ function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
         }),
       });
       onSuccess(data);
-      onClose();
+      setSuccessMsg(`Sale record added for ${formatDate(form.saleDate)}.`);
+      setForm({ saleDate: "", item: "", qty: "", rate: "", amount: "" });
+      setAmountManual(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add record");
     } finally {
@@ -349,10 +359,13 @@ function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
                 onChange={(e) => handleAmountChange(e.target.value)} className={inputCls} />
             </div>
           </div>
+          {successMsg && (
+            <p className="text-sm text-green-400 flex items-center space-x-1"><span>✓</span><span>{successMsg}</span></p>
+          )}
           {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
         </div>
         <div className="flex space-x-3 p-6 pt-0">
-          <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Cancel</button>
+          <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Close</button>
           <button onClick={handleSubmit} disabled={loading}
             className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center space-x-2">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -370,6 +383,7 @@ function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSucce
   const [amountManual, setAmountManual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   const handleFieldChange = (key: string, value: string) => {
     setForm((f) => {
@@ -410,7 +424,9 @@ function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSucce
         }),
       });
       onSuccess(data);
-      onClose();
+      setSuccessMsg(`Purchase record added for bill date ${formatDate(form.billDate)}.`);
+      setForm({ billDate: "", purchaseDate: "", item: "", qty: "", rate: "", amount: "" });
+      setAmountManual(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add record");
     } finally {
@@ -472,10 +488,13 @@ function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                 onChange={(e) => handleAmountChange(e.target.value)} className={inputCls} />
             </div>
           </div>
+          {successMsg && (
+            <p className="text-sm text-green-400 flex items-center space-x-1"><span>✓</span><span>{successMsg}</span></p>
+          )}
           {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
         </div>
         <div className="flex space-x-3 p-6 pt-0">
-          <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Cancel</button>
+          <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Close</button>
           <button onClick={handleSubmit} disabled={loading}
             className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center space-x-2">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
