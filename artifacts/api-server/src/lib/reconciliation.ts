@@ -91,6 +91,10 @@ function normalizeStr(val: unknown): string {
   return String(val).trim().toLowerCase();
 }
 
+function toTitleCase(str: string): string {
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function headerMap(headers: unknown[]): Record<string, number> {
   const map: Record<string, number> = {};
   headers.forEach((h, i) => {
@@ -131,7 +135,7 @@ export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
     if (qty === 0) continue;
     rows.push({
       saleDate: normalizeDate(r[datecol]),
-      item: String(r[itemcol] ?? "").trim(),
+      item: toTitleCase(String(r[itemcol] ?? "").trim()),
       qty,
       rate: normalizeNum(r[ratecol]),
       amount: normalizeNum(r[amtcol]),
@@ -167,7 +171,7 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
     rows.push({
       billDate: normalizeDate(r[billdatecol]),
       purchaseDate: normalizeDate(r[purdatecol]),
-      item: String(r[itemcol] ?? "").trim(),
+      item: toTitleCase(String(r[itemcol] ?? "").trim()),
       qty,
       rate: normalizeNum(r[ratecol]),
       amount: normalizeNum(r[amtcol]),
