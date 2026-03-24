@@ -155,6 +155,8 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
   const hm = headerMap(raw[0] as unknown[]);
   const billdatecol = findCol(hm, "date", "bill date", "billdate", "payment date");
   const purdatecol = findCol(hm, "purchase date", "purchasedate", "original purchase date", "orig date");
+  // If no separate purchase date column exists, fall back to bill date column
+  const effectivePurDateCol = purdatecol !== -1 ? purdatecol : billdatecol;
   const itemcol = findCol(hm, "item", "commodity", "product", "name");
   const qtycol = findCol(hm, "qty", "quantity", "qtl", "qty (qtl)");
   const ratecol = findCol(hm, "rate", "price");
@@ -170,7 +172,7 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
     if (qty === 0) continue;
     rows.push({
       billDate: normalizeDate(r[billdatecol]),
-      purchaseDate: normalizeDate(r[purdatecol]),
+      purchaseDate: normalizeDate(r[effectivePurDateCol]),
       item: toTitleCase(String(r[itemcol] ?? "").trim()),
       qty,
       rate: normalizeNum(r[ratecol]),
