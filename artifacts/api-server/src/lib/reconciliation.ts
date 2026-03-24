@@ -181,12 +181,21 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
   return rows;
 }
 
-function exactKey(qty: number, rate: number, amount: number): string {
-  return `${qty}|${rate}|${amount}`;
+const AMOUNT_TOLERANCE = 0.2;
+
+function lotsMatch(
+  saleQty: number, saleRate: number, saleAmount: number,
+  purQty: number, purRate: number, purAmount: number,
+): boolean {
+  if (saleQty !== purQty) return false;
+  if (saleRate !== purRate) return false;
+  if (Math.abs(saleAmount - purAmount) > AMOUNT_TOLERANCE) return false;
+  return true;
 }
 
 /**
- * Run exact 1-to-1 matching between pending sales and unmatched purchases.
+ * Run 1-to-1 matching between pending sales and unmatched purchases.
+ * Qty and Rate must match exactly; Amount may differ by up to ±0.2.
  * Returns a list of match pairs (saleId, purchaseId, purchaseBillDate).
  * Mutates salesRows and purchaseRows in-place to update status/purchaseBillDate.
  */
@@ -200,7 +209,6 @@ export function runMatching(
   for (const sale of salesRows) {
     if (sale.status === "Matched") continue;
     const saleItemNorm = normalizeStr(sale.item);
-    const saleKey = exactKey(sale.qty, sale.rate, sale.amount);
 
     for (let pi = 0; pi < purchaseRows.length; pi++) {
       if (purchaseUsed.has(pi)) continue;
@@ -208,7 +216,7 @@ export function runMatching(
       if (pur.status === "Matched") continue;
       if (normalizeStr(pur.item) !== saleItemNorm) continue;
       if (pur.purchaseDate !== sale.saleDate) continue;
-      if (exactKey(pur.qty, pur.rate, pur.amount) !== saleKey) continue;
+      if (!lotsMatch(sale.qty, sale.rate, sale.amount, pur.qty, pur.rate, pur.amount)) continue;
 
       sale.purchaseBillDate = pur.billDate;
       sale.status = "Matched";
