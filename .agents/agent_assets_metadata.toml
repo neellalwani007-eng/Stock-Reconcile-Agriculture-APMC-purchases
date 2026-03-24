@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "gjLv2C66X6nNFuQv55-S3"
+uri = "file://stock-reconciler-logo.png"
+type = "image"
+title = "Stock Reconciler Logo (512×512 PNG)"
