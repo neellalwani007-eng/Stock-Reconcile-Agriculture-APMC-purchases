@@ -4,6 +4,7 @@ import {
   GetCurrentAuthUserResponse,
 } from "@workspace/api-zod";
 import { db, usersTable } from "@workspace/db";
+import { and, eq, ne } from "drizzle-orm";
 import {
   clearSession,
   createGoogleOAuth2Client,
@@ -60,6 +61,14 @@ async function upsertUser(userInfo: {
     lastName: userInfo.family_name ?? userInfo.name?.split(" ").slice(1).join(" ") ?? null,
     profileImageUrl: userInfo.picture ?? null,
   };
+
+  // Remove any stale rows that share the same email but a different id
+  // (can happen when switching auth providers or re-creating OAuth clients)
+  if (userData.email) {
+    await db
+      .delete(usersTable)
+      .where(and(eq(usersTable.email, userData.email), ne(usersTable.id, userData.id)));
+  }
 
   const [user] = await db
     .insert(usersTable)
