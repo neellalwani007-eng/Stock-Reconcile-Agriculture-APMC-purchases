@@ -27,7 +27,7 @@ function LoginPage() {
         </div>
         <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Stock Reconciler</h1>
         <p className="text-white/60 text-sm max-w-[260px]">
-          Automated agricultural matching &amp; precision reconciliations
+          Automated stock reconciliation
         </p>
       </div>
 

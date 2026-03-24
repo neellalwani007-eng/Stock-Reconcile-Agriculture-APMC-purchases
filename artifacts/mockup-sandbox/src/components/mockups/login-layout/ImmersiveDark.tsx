@@ -13,7 +13,7 @@ export default function ImmersiveDark() {
           Stock Reconciler
         </h1>
         <p className="text-white/60 text-sm max-w-[250px]">
-          Automated agricultural matching & precision reconciliations
+          Automated stock reconciliation
         </p>
       </div>
 
