@@ -3,6 +3,10 @@ import type { SessionData } from "./auth.js";
 
 const DRIVE_FILE_NAME = "stock-reconciler-data.json";
 
+function toTitleCase(str: string): string {
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export interface DrSaleRecord {
   id: number;
   saleDate: string;
@@ -111,8 +115,14 @@ export async function readUserData(
       ...parsed,
       nextSaleId: parsed.nextSaleId ?? 1,
       nextPurchaseId: parsed.nextPurchaseId ?? 1,
-      sales: parsed.sales ?? [],
-      purchases: parsed.purchases ?? [],
+      sales: (parsed.sales ?? []).map((s) => ({
+        ...s,
+        item: toTitleCase(s.item ?? ""),
+      })),
+      purchases: (parsed.purchases ?? []).map((p) => ({
+        ...p,
+        item: toTitleCase(p.item ?? ""),
+      })),
     };
   } catch {
     return { ...EMPTY_DATA };
