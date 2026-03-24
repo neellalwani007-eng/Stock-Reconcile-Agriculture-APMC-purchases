@@ -24,3 +24,8 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+GOOGLE_CLIENT_ID = "94810128357-r3r99g18f3fm06lg5rbi8o08thhem430.apps.googleusercontent.com"
