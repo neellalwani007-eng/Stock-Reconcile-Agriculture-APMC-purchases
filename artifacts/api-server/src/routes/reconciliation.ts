@@ -19,6 +19,19 @@ import {
 const router: IRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+// Merge rows from multiple files
+function parseSalesFiles(files: Express.Multer.File[]): ReturnType<typeof parseSalesSheet> {
+  const all: ReturnType<typeof parseSalesSheet> = [];
+  for (const f of files) all.push(...parseSalesSheet(f.buffer));
+  return all;
+}
+
+function parsePurchaseFiles(files: Express.Multer.File[]): ReturnType<typeof parsePurchaseSheet> {
+  const all: ReturnType<typeof parsePurchaseSheet> = [];
+  for (const f of files) all.push(...parsePurchaseSheet(f.buffer));
+  return all;
+}
+
 function dbRowToSaleRow(r: typeof saleRecords.$inferSelect): SaleRow {
   return {
     id: r.id,
@@ -105,8 +118,8 @@ async function runMatchingForUser(userId: string): Promise<ReconciliationResult>
 router.post(
   "/run",
   upload.fields([
-    { name: "salesFile", maxCount: 1 },
-    { name: "purchaseFile", maxCount: 1 },
+    { name: "salesFile", maxCount: 20 },
+    { name: "purchaseFile", maxCount: 20 },
   ]),
   async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
