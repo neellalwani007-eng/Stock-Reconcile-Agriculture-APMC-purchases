@@ -765,6 +765,7 @@ export default function Dashboard() {
   const [uploadResult, setUploadResult] = useState<ReconciliationResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [showFormatGuide, setShowFormatGuide] = useState(false);
   const [selectedFY, setSelectedFY] = useState<string>(getCurrentFY());
   const availableFYs = getAvailableFYs();
 
@@ -929,6 +930,93 @@ export default function Dashboard() {
                       <p className="text-muted-foreground mt-1 text-sm">
                         Upload one or both files. Matching runs automatically against <strong>all your saved records</strong>.
                       </p>
+
+                      {/* Format Guide toggle */}
+                      <button
+                        onClick={() => setShowFormatGuide((v) => !v)}
+                        className="mt-3 flex items-center space-x-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                      >
+                        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", showFormatGuide && "rotate-180")} />
+                        <span>{showFormatGuide ? "Hide format guide" : "View required file format"}</span>
+                      </button>
+
+                      <AnimatePresence>
+                        {showFormatGuide && (
+                          <motion.div
+                            key="format-guide"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {/* Sales format */}
+                              <div className="rounded-xl border border-border bg-white/5 p-4 space-y-2">
+                                <p className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center space-x-1.5">
+                                  <FileSpreadsheet className="w-3.5 h-3.5 text-primary" />
+                                  <span>Sales Bill — Required Columns</span>
+                                </p>
+                                <table className="w-full text-xs text-muted-foreground">
+                                  <thead>
+                                    <tr className="border-b border-border/50">
+                                      <th className="text-left py-1 pr-3 font-semibold text-foreground/70">Column Header</th>
+                                      <th className="text-left py-1 font-semibold text-foreground/70">Example</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border/30">
+                                    {[
+                                      ["Sale Date", "15/04/2025"],
+                                      ["Item / Commodity", "Onion"],
+                                      ["Qty (QTL)", "120.50"],
+                                      ["Rate", "850"],
+                                      ["Amount", "102425"],
+                                    ].map(([col, ex]) => (
+                                      <tr key={col}>
+                                        <td className="py-1 pr-3 font-medium text-foreground/80">{col}</td>
+                                        <td className="py-1 text-muted-foreground">{ex}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                                <p className="text-[11px] text-muted-foreground/70">Date format: DD/MM/YYYY or YYYY-MM-DD · Amount auto-calculated from Qty × Rate</p>
+                              </div>
+
+                              {/* Purchase format */}
+                              <div className="rounded-xl border border-border bg-white/5 p-4 space-y-2">
+                                <p className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center space-x-1.5">
+                                  <FileSpreadsheet className="w-3.5 h-3.5 text-primary" />
+                                  <span>Purchase Bill — Required Columns</span>
+                                </p>
+                                <table className="w-full text-xs text-muted-foreground">
+                                  <thead>
+                                    <tr className="border-b border-border/50">
+                                      <th className="text-left py-1 pr-3 font-semibold text-foreground/70">Column Header</th>
+                                      <th className="text-left py-1 font-semibold text-foreground/70">Example</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border/30">
+                                    {[
+                                      ["Date / Bill Date", "20/04/2025"],
+                                      ["Purchase Date", "15/04/2025"],
+                                      ["Item / Commodity", "Onion"],
+                                      ["Qty (QTL)", "120.50"],
+                                      ["Rate", "850"],
+                                      ["Amount", "102425"],
+                                    ].map(([col, ex]) => (
+                                      <tr key={col}>
+                                        <td className="py-1 pr-3 font-medium text-foreground/80">{col}</td>
+                                        <td className="py-1 text-muted-foreground">{ex}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                                <p className="text-[11px] text-muted-foreground/70">Bill Date = payment date · Purchase Date = original purchase date · Accepts .xlsx and .xls</p>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
 
                     <div className="p-6 md:p-8">
