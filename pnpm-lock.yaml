@@ -413,6 +413,9 @@ importers:
 
   artifacts/reconciliation-app:
     dependencies:
+      '@workspace/replit-auth-web':
+        specifier: workspace:*
+        version: link:../../lib/replit-auth-web
       react-dropzone:
         specifier: ^15.0.0
         version: 15.0.0(react@19.1.0)

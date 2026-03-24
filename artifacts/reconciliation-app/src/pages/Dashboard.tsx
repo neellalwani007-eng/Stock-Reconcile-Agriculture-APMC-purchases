@@ -12,32 +12,50 @@ import {
   RefreshCcw,
   BarChart3,
   Trash2,
-  Lock,
   X,
   Upload,
   FileSpreadsheet,
+  Plus,
+  LogOut,
+  User,
+  CalendarX,
 } from "lucide-react";
-import { useRunReconciliation, useGetReports, useDeleteRecords } from "@workspace/api-client-react";
-import type { ReconciliationResult } from "@workspace/api-client-react";
+import { useGetReports } from "@workspace/api-client-react";
+import type { ReconciliationResult, SaleRow, PurchaseRow } from "@workspace/api-client-react";
+import { useAuth } from "@workspace/replit-auth-web";
 import { FileDropzone } from "@/components/FileDropzone";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 
 type AppMode = "upload" | "reports";
-type UploadMode = "both" | "purchase-only";
+type UploadMode = "both" | "sale-only" | "purchase-only";
 
-function useReconciliationDownloads(data: ReconciliationResult | undefined) {
+const BASE = import.meta.env.BASE_URL.replace(/\/+$/, "");
+
+async function apiFetch(path: string, opts?: RequestInit) {
+  const res = await fetch(`${BASE}/api/reconciliation${path}`, {
+    credentials: "include",
+    ...opts,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: "Request failed" }));
+    throw new Error(body.error || "Request failed");
+  }
+  return res.json() as Promise<ReconciliationResult>;
+}
+
+function useReconciliationDownloads() {
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const handleDownload = async (fileType: string, filename: string) => {
-    if (!data) return;
     try {
       setDownloading(fileType);
-      const res = await fetch(`/api/reconciliation/download/${fileType}`, {
+      const res = await fetch(`${BASE}/api/reconciliation/download/${fileType}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        credentials: "include",
+        body: JSON.stringify({}),
       });
       if (!res.ok) throw new Error("Download failed");
       const blob = await res.blob();
@@ -59,30 +77,42 @@ function useReconciliationDownloads(data: ReconciliationResult | undefined) {
   return { handleDownload, downloading };
 }
 
-function DeleteModal({
+/* ── Delete by Date Modal ── */
+function DeleteByDateModal({
+  salesDates,
+  purchaseDates,
   onClose,
   onSuccess,
 }: {
+  salesDates: string[];
+  purchaseDates: string[];
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (data: ReconciliationResult) => void;
 }) {
-  const [password, setPassword] = useState("");
+  const [type, setType] = useState<"sale" | "purchase">("sale");
+  const [date, setDate] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const { mutate: deleteRecords, isPending } = useDeleteRecords({
-    mutation: {
-      onSuccess: () => {
-        onSuccess();
-        onClose();
-      },
-      onError: (err) => {
-        setError(err.error || "Incorrect password.");
-      },
-    },
-  });
 
-  const handleDelete = () => {
+  const dates = type === "sale" ? salesDates : purchaseDates;
+
+  const handleDelete = async () => {
+    if (!date) return;
     setError("");
-    deleteRecords({ data: { password } });
+    setLoading(true);
+    try {
+      const data = await apiFetch("/records/date", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, type }),
+      });
+      onSuccess(data);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -96,54 +126,66 @@ function DeleteModal({
         <div className="flex items-center justify-between p-6 border-b border-border">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-destructive/10 rounded-lg">
-              <Trash2 className="w-5 h-5 text-destructive" />
+              <CalendarX className="w-5 h-5 text-destructive" />
             </div>
-            <h3 className="font-bold text-lg text-foreground">Delete All Records</h3>
+            <h3 className="font-bold text-lg text-foreground">Delete by Date</h3>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors">
             <X className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
-        <div className="p-6 space-y-4">
-          <p className="text-muted-foreground text-sm">
-            This will permanently delete <strong>all</strong> saved sales and purchase records from the database.
-            This action cannot be undone.
-          </p>
+        <div className="p-6 space-y-5">
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground flex items-center space-x-2">
-              <Lock className="w-4 h-4" />
-              <span>Enter Password to Confirm</span>
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleDelete()}
-              placeholder="Enter password..."
-              className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
-            />
-            {error && (
-              <p className="text-sm text-destructive flex items-center space-x-1">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{error}</span>
-              </p>
+            <label className="text-sm font-semibold text-foreground">Record Type</label>
+            <div className="flex rounded-xl overflow-hidden border border-border">
+              {(["sale", "purchase"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => { setType(t); setDate(""); }}
+                  className={cn(
+                    "flex-1 px-4 py-2.5 text-sm font-medium transition-colors capitalize",
+                    type === t ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {t === "sale" ? "Sales" : "Purchases"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-foreground">Select Date</label>
+            <select
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
+            >
+              <option value="">-- Choose a date --</option>
+              {dates.map((d) => (
+                <option key={d} value={d}>{formatDate(d)}</option>
+              ))}
+            </select>
+            {dates.length === 0 && (
+              <p className="text-xs text-muted-foreground">No {type} dates available.</p>
             )}
           </div>
+          {error && (
+            <p className="text-sm text-destructive flex items-center space-x-1">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </p>
+          )}
         </div>
         <div className="flex space-x-3 p-6 pt-0">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium"
-          >
+          <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">
             Cancel
           </button>
           <button
             onClick={handleDelete}
-            disabled={!password || isPending}
+            disabled={!date || loading}
             className="flex-1 px-4 py-3 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center space-x-2"
           >
-            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            <span>{isPending ? "Deleting..." : "Delete All"}</span>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            <span>{loading ? "Deleting..." : "Delete Records"}</span>
           </button>
         </div>
       </motion.div>
@@ -151,57 +193,257 @@ function DeleteModal({
   );
 }
 
+/* ── Add Sale Modal ── */
+function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (data: ReconciliationResult) => void }) {
+  const [form, setForm] = useState({ saleDate: "", item: "", qty: "", rate: "", amount: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    if (!form.saleDate || !form.item || !form.qty || !form.rate || !form.amount) {
+      setError("All fields are required.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      const data = await apiFetch("/records/sale", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          saleDate: form.saleDate,
+          item: form.item.trim(),
+          qty: parseFloat(form.qty),
+          rate: parseFloat(form.rate),
+          amount: parseFloat(form.amount),
+        }),
+      });
+      onSuccess(data);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add record");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-md"
+      >
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Plus className="w-5 h-5 text-primary" />
+            </div>
+            <h3 className="font-bold text-lg text-foreground">Add Sale Record</h3>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors">
+            <X className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2 space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sale Date</label>
+              <input type="date" value={form.saleDate} onChange={(e) => setForm((f) => ({ ...f, saleDate: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+            </div>
+            <div className="col-span-2 space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Item / Commodity</label>
+              <input type="text" placeholder="e.g. Onion" value={form.item} onChange={(e) => setForm((f) => ({ ...f, item: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+            </div>
+            {[
+              { key: "qty", label: "Qty (QTL)", placeholder: "0.00" },
+              { key: "rate", label: "Rate", placeholder: "0.00" },
+              { key: "amount", label: "Amount", placeholder: "0.00" },
+            ].map(({ key, label, placeholder }) => (
+              <div key={key} className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
+                <input type="number" step="0.01" placeholder={placeholder}
+                  value={form[key as keyof typeof form]}
+                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                  className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+              </div>
+            ))}
+          </div>
+          {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
+        </div>
+        <div className="flex space-x-3 p-6 pt-0">
+          <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Cancel</button>
+          <button onClick={handleSubmit} disabled={loading}
+            className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center space-x-2">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            <span>{loading ? "Adding..." : "Add Sale"}</span>
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ── Add Purchase Modal ── */
+function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (data: ReconciliationResult) => void }) {
+  const [form, setForm] = useState({ billDate: "", purchaseDate: "", item: "", qty: "", rate: "", amount: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    if (!form.billDate || !form.purchaseDate || !form.item || !form.qty || !form.rate || !form.amount) {
+      setError("All fields are required.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      const data = await apiFetch("/records/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          billDate: form.billDate,
+          purchaseDate: form.purchaseDate,
+          item: form.item.trim(),
+          qty: parseFloat(form.qty),
+          rate: parseFloat(form.rate),
+          amount: parseFloat(form.amount),
+        }),
+      });
+      onSuccess(data);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add record");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-md"
+      >
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Plus className="w-5 h-5 text-primary" />
+            </div>
+            <h3 className="font-bold text-lg text-foreground">Add Purchase Record</h3>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors">
+            <X className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bill Date</label>
+              <input type="date" value={form.billDate} onChange={(e) => setForm((f) => ({ ...f, billDate: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Purchase Date</label>
+              <input type="date" value={form.purchaseDate} onChange={(e) => setForm((f) => ({ ...f, purchaseDate: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+            </div>
+            <div className="col-span-2 space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Item / Commodity</label>
+              <input type="text" placeholder="e.g. Corn" value={form.item} onChange={(e) => setForm((f) => ({ ...f, item: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+            </div>
+            {[
+              { key: "qty", label: "Qty (QTL)", placeholder: "0.00" },
+              { key: "rate", label: "Rate", placeholder: "0.00" },
+              { key: "amount", label: "Amount", placeholder: "0.00" },
+            ].map(({ key, label, placeholder }) => (
+              <div key={key} className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
+                <input type="number" step="0.01" placeholder={placeholder}
+                  value={form[key as keyof typeof form]}
+                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                  className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+              </div>
+            ))}
+          </div>
+          {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
+        </div>
+        <div className="flex space-x-3 p-6 pt-0">
+          <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Cancel</button>
+          <button onClick={handleSubmit} disabled={loading}
+            className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center space-x-2">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            <span>{loading ? "Adding..." : "Add Purchase"}</span>
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ── Results View ── */
 function ResultsView({
   data,
-  showDeleteButton = false,
-  onDelete,
+  onDataChange,
 }: {
   data: ReconciliationResult;
-  showDeleteButton?: boolean;
-  onDelete?: () => void;
+  onDataChange: (data: ReconciliationResult) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"sales" | "purchase" | "pending">("sales");
-  const { handleDownload, downloading } = useReconciliationDownloads(data);
+  const [showDeleteByDate, setShowDeleteByDate] = useState(false);
+  const [showAddSale, setShowAddSale] = useState(false);
+  const [showAddPurchase, setShowAddPurchase] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const { handleDownload, downloading } = useReconciliationDownloads();
+
+  const salesDates = [...new Set(data.salesRows.map((r) => r.saleDate))].sort();
+  const purchaseDates = [...new Set(data.purchaseRows.map((r) => r.billDate))].sort();
+
+  const handleDeleteRow = async (type: "sale" | "purchase", id: number) => {
+    if (!confirm("Delete this record? Matching will be re-run automatically.")) return;
+    setDeletingId(id);
+    try {
+      const result = await apiFetch(`/records/${type}/${id}`, { method: "DELETE" });
+      onDataChange(result);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="space-y-8">
-      {/* Top Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard
-          title="Exactly Matched Lots"
-          value={data.matchedCount}
-          icon={<CheckCircle2 className="w-8 h-8" />}
-          variant="success"
-        />
-        <StatCard
-          title="Pending Farmer Payments"
-          value={data.pendingCount}
-          icon={<Clock className="w-8 h-8" />}
-          variant="warning"
-          description="Sale rows without purchase bills"
-        />
-        <StatCard
-          title="Unmatched Purchases"
-          value={data.unmatchedPurchaseCount}
-          icon={<AlertCircle className="w-8 h-8" />}
-          variant="destructive"
-          description="Purchase bills without sale entries"
-        />
+        <StatCard title="Exactly Matched Lots" value={data.matchedCount} icon={<CheckCircle2 className="w-8 h-8" />} variant="success" />
+        <StatCard title="Pending Farmer Payments" value={data.pendingCount} icon={<Clock className="w-8 h-8" />} variant="warning" description="Sale rows without purchase bills" />
+        <StatCard title="Unmatched Purchases" value={data.unmatchedPurchaseCount} icon={<AlertCircle className="w-8 h-8" />} variant="destructive" description="Purchase bills without sale entries" />
       </div>
 
-      {/* Downloads Section */}
+      {/* Downloads + Quick Actions */}
       <section className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-        <div className="p-6 border-b border-border bg-muted/20 flex items-center justify-between">
+        <div className="p-6 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-display font-semibold text-lg text-foreground">Export Reports</h3>
-          {showDeleteButton && (
-            <button
-              onClick={onDelete}
-              className="flex items-center space-x-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Delete All Records</span>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setShowAddSale(true)}
+              className="flex items-center space-x-1.5 px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors border border-primary/30">
+              <Plus className="w-4 h-4" /><span>Add Sale</span>
             </button>
-          )}
+            <button onClick={() => setShowAddPurchase(true)}
+              className="flex items-center space-x-1.5 px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors border border-primary/30">
+              <Plus className="w-4 h-4" /><span>Add Purchase</span>
+            </button>
+            <button onClick={() => setShowDeleteByDate(true)}
+              className="flex items-center space-x-1.5 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-lg transition-colors">
+              <CalendarX className="w-4 h-4" /><span>Delete by Date</span>
+            </button>
+          </div>
         </div>
         <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
@@ -210,12 +452,8 @@ function ResultsView({
             { id: "datewise-report", label: "Date-wise Report", desc: "Grouped by sale date", filename: "datewise_report.xlsx" },
             { id: "purchase-exceptions", label: "Purchase Exceptions", desc: "Unmatched/Extra entries", filename: "purchase_exceptions.xlsx" },
           ].map((btn) => (
-            <button
-              key={btn.id}
-              onClick={() => handleDownload(btn.id, btn.filename)}
-              disabled={downloading !== null}
-              className="flex flex-col items-center justify-center p-4 border border-border rounded-xl hover:border-primary hover:bg-primary/5 transition-all text-center group"
-            >
+            <button key={btn.id} onClick={() => handleDownload(btn.id, btn.filename)} disabled={downloading !== null}
+              className="flex flex-col items-center justify-center p-4 border border-border rounded-xl hover:border-primary hover:bg-primary/5 transition-all text-center group">
               {downloading === btn.id ? (
                 <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
               ) : (
@@ -261,9 +499,7 @@ function ResultsView({
                 </tr>
               ))}
               {data.summary.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">No data available</td>
-                </tr>
+                <tr><td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">No data available</td></tr>
               )}
             </tbody>
           </table>
@@ -274,20 +510,13 @@ function ResultsView({
       <section className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
         <div className="border-b border-border bg-muted/20 px-4 flex space-x-1 overflow-x-auto">
           {[
-            { key: "sales", label: "Sales Details" },
+            { key: "sales", label: "All Sales" },
             { key: "pending", label: `Pending Pavati (${data.pendingCount})` },
             { key: "purchase", label: `Purchase Exceptions (${data.unmatchedPurchaseCount})` },
           ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key as typeof activeTab)}
-              className={cn(
-                "px-6 py-4 text-sm font-medium whitespace-nowrap border-b-2 transition-colors",
-                activeTab === tab.key
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-            >
+            <button key={tab.key} onClick={() => setActiveTab(tab.key as typeof activeTab)}
+              className={cn("px-6 py-4 text-sm font-medium whitespace-nowrap border-b-2 transition-colors",
+                activeTab === tab.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
               {tab.label}
             </button>
           ))}
@@ -298,37 +527,44 @@ function ResultsView({
             <table className="w-full text-sm text-left relative">
               <thead className="text-xs text-muted-foreground uppercase bg-card sticky top-0 border-b border-border shadow-sm z-10">
                 <tr>
-                  <th className="px-6 py-4 font-semibold">Sale Date</th>
-                  <th className="px-6 py-4 font-semibold">Item</th>
-                  <th className="px-6 py-4 font-semibold text-right">Qty (QTL)</th>
-                  <th className="px-6 py-4 font-semibold text-right">Rate</th>
-                  <th className="px-6 py-4 font-semibold text-right">Amount</th>
-                  <th className="px-6 py-4 font-semibold">Purchase Bill Date</th>
-                  <th className="px-6 py-4 font-semibold text-center">Status</th>
+                  <th className="px-4 py-4 font-semibold">Sale Date</th>
+                  <th className="px-4 py-4 font-semibold">Item</th>
+                  <th className="px-4 py-4 font-semibold text-right">Qty</th>
+                  <th className="px-4 py-4 font-semibold text-right">Rate</th>
+                  <th className="px-4 py-4 font-semibold text-right">Amount</th>
+                  <th className="px-4 py-4 font-semibold">Bill Date</th>
+                  <th className="px-4 py-4 font-semibold text-center">Status</th>
+                  <th className="px-4 py-4 font-semibold text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {data.salesRows
                   .filter((r) => (activeTab === "pending" ? r.status === "Pending" : true))
-                  .map((row, i) => (
-                    <tr key={i} className="hover:bg-muted/30">
-                      <td className="px-6 py-3 whitespace-nowrap">{formatDate(row.saleDate)}</td>
-                      <td className="px-6 py-3 font-medium">{row.item}</td>
-                      <td className="px-6 py-3 text-right">{row.qty.toFixed(2)}</td>
-                      <td className="px-6 py-3 text-right">{row.rate}</td>
-                      <td className="px-6 py-3 text-right font-medium">{formatCurrency(row.amount)}</td>
-                      <td className="px-6 py-3 whitespace-nowrap text-muted-foreground">
+                  .map((row) => (
+                    <tr key={row.id} className="hover:bg-muted/30">
+                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(row.saleDate)}</td>
+                      <td className="px-4 py-3 font-medium">{row.item}</td>
+                      <td className="px-4 py-3 text-right">{row.qty.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">{row.rate}</td>
+                      <td className="px-4 py-3 text-right font-medium">{formatCurrency(row.amount)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
                         {row.purchaseBillDate ? formatDate(row.purchaseBillDate) : "—"}
                       </td>
-                      <td className="px-6 py-3 text-center">
-                        <StatusBadge status={row.status} />
+                      <td className="px-4 py-3 text-center"><StatusBadge status={row.status} /></td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => row.id != null && handleDeleteRow("sale", row.id)}
+                          disabled={deletingId === row.id}
+                          className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors disabled:opacity-50"
+                          title="Delete this record"
+                        >
+                          {deletingId === row.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
                       </td>
                     </tr>
                   ))}
-                {data.salesRows.filter((r) => (activeTab === "pending" ? r.status === "Pending" : true)).length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">No records found</td>
-                  </tr>
+                {data.salesRows.filter((r) => activeTab === "pending" ? r.status === "Pending" : true).length === 0 && (
+                  <tr><td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">No records found</td></tr>
                 )}
               </tbody>
             </table>
@@ -338,96 +574,135 @@ function ResultsView({
             <table className="w-full text-sm text-left relative">
               <thead className="text-xs text-muted-foreground uppercase bg-card sticky top-0 border-b border-border shadow-sm z-10">
                 <tr>
-                  <th className="px-6 py-4 font-semibold">Bill Date</th>
-                  <th className="px-6 py-4 font-semibold text-primary">Orig. Purchase Date</th>
-                  <th className="px-6 py-4 font-semibold">Item</th>
-                  <th className="px-6 py-4 font-semibold text-right">Qty (QTL)</th>
-                  <th className="px-6 py-4 font-semibold text-right">Rate</th>
-                  <th className="px-6 py-4 font-semibold text-right">Amount</th>
-                  <th className="px-6 py-4 font-semibold text-center">Status</th>
+                  <th className="px-4 py-4 font-semibold">Bill Date</th>
+                  <th className="px-4 py-4 font-semibold text-primary">Purchase Date</th>
+                  <th className="px-4 py-4 font-semibold">Item</th>
+                  <th className="px-4 py-4 font-semibold text-right">Qty</th>
+                  <th className="px-4 py-4 font-semibold text-right">Rate</th>
+                  <th className="px-4 py-4 font-semibold text-right">Amount</th>
+                  <th className="px-4 py-4 font-semibold text-center">Status</th>
+                  <th className="px-4 py-4 font-semibold text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {data.purchaseRows
                   .filter((r) => r.status !== "Matched")
-                  .map((row, i) => (
-                    <tr key={i} className="hover:bg-muted/30">
-                      <td className="px-6 py-3 whitespace-nowrap">{formatDate(row.billDate)}</td>
-                      <td className="px-6 py-3 whitespace-nowrap font-medium text-primary">{formatDate(row.purchaseDate)}</td>
-                      <td className="px-6 py-3">{row.item}</td>
-                      <td className="px-6 py-3 text-right">{row.qty.toFixed(2)}</td>
-                      <td className="px-6 py-3 text-right">{row.rate}</td>
-                      <td className="px-6 py-3 text-right font-medium">{formatCurrency(row.amount)}</td>
-                      <td className="px-6 py-3 text-center">
-                        <StatusBadge status={row.status} />
+                  .map((row) => (
+                    <tr key={row.id} className="hover:bg-muted/30">
+                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(row.billDate)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap font-medium text-primary">{formatDate(row.purchaseDate)}</td>
+                      <td className="px-4 py-3">{row.item}</td>
+                      <td className="px-4 py-3 text-right">{row.qty.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">{row.rate}</td>
+                      <td className="px-4 py-3 text-right font-medium">{formatCurrency(row.amount)}</td>
+                      <td className="px-4 py-3 text-center"><StatusBadge status={row.status} /></td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => row.id != null && handleDeleteRow("purchase", row.id)}
+                          disabled={deletingId === row.id}
+                          className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors disabled:opacity-50"
+                          title="Delete this record"
+                        >
+                          {deletingId === row.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
                       </td>
                     </tr>
                   ))}
                 {data.purchaseRows.filter((r) => r.status !== "Matched").length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">All purchase bills matched</td>
-                  </tr>
+                  <tr><td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">All purchase bills matched</td></tr>
                 )}
               </tbody>
             </table>
           )}
         </div>
       </section>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {showDeleteByDate && (
+          <DeleteByDateModal
+            salesDates={salesDates}
+            purchaseDates={purchaseDates}
+            onClose={() => setShowDeleteByDate(false)}
+            onSuccess={onDataChange}
+          />
+        )}
+        {showAddSale && <AddSaleModal onClose={() => setShowAddSale(false)} onSuccess={onDataChange} />}
+        {showAddPurchase && <AddPurchaseModal onClose={() => setShowAddPurchase(false)} onSuccess={onDataChange} />}
+      </AnimatePresence>
     </div>
   );
 }
 
+/* ── Main Dashboard ── */
 export default function Dashboard() {
+  const { user, logout } = useAuth();
   const [appMode, setAppMode] = useState<AppMode>("upload");
   const [uploadMode, setUploadMode] = useState<UploadMode>("both");
   const [salesFile, setSalesFile] = useState<File | null>(null);
   const [purchaseFile, setPurchaseFile] = useState<File | null>(null);
   const [uploadResult, setUploadResult] = useState<ReconciliationResult | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-
-  const { mutate: runReconciliation, isPending, error, reset: resetMutation } = useRunReconciliation({
-    mutation: {
-      onSuccess: (data) => {
-        setUploadResult(data);
-      },
-    },
-  });
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   const { data: reportsData, isLoading: reportsLoading, refetch: refetchReports } = useGetReports({
     query: { enabled: appMode === "reports" },
   });
 
-  const handleRun = () => {
-    if (!purchaseFile) return;
-    const formData = new FormData();
-    if (salesFile) formData.append("salesFile", salesFile);
-    formData.append("purchaseFile", purchaseFile);
+  const [liveReportsData, setLiveReportsData] = useState<ReconciliationResult | null>(null);
 
-    runReconciliation({ data: { salesFile: salesFile ?? undefined, purchaseFile } });
+  const handleRun = async () => {
+    if (uploadMode === "both" && (!salesFile || !purchaseFile)) return;
+    if (uploadMode === "sale-only" && !salesFile) return;
+    if (uploadMode === "purchase-only" && !purchaseFile) return;
+
+    setUploadError("");
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      if (salesFile && uploadMode !== "purchase-only") formData.append("salesFile", salesFile);
+      if (purchaseFile && uploadMode !== "sale-only") formData.append("purchaseFile", purchaseFile);
+
+      const res = await fetch(`${BASE}/api/reconciliation/run`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setUploadResult(data);
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleNewUpload = () => {
     setSalesFile(null);
     setPurchaseFile(null);
     setUploadResult(null);
-    resetMutation();
+    setUploadError("");
   };
 
   const handleSwitchToReports = () => {
     setAppMode("reports");
+    setLiveReportsData(null);
     refetchReports();
   };
 
-  const handleSwitchToUpload = () => {
-    setAppMode("upload");
+  const handleReportsDataChange = (data: ReconciliationResult) => {
+    setLiveReportsData(data);
   };
 
-  const handleDeleteSuccess = () => {
-    setUploadResult(null);
-    refetchReports();
-  };
+  const isRunDisabled =
+    uploading ||
+    (uploadMode === "both" && (!salesFile || !purchaseFile)) ||
+    (uploadMode === "sale-only" && !salesFile) ||
+    (uploadMode === "purchase-only" && !purchaseFile);
 
-  const isRunDisabled = !purchaseFile || isPending;
+  const displayName = user?.firstName || user?.email?.split("@")[0] || "User";
+  const displayReportsData = liveReportsData ?? reportsData;
 
   return (
     <div className="min-h-screen pb-20">
@@ -438,39 +713,34 @@ export default function Dashboard() {
             <div className="bg-primary p-2 rounded-lg text-primary-foreground shadow-sm">
               <ArrowRightLeft className="w-5 h-5" />
             </div>
-            <h1 className="font-display font-bold text-xl text-foreground">AgriRecon System</h1>
+            <h1 className="font-display font-bold text-xl text-foreground">Stock Reconciler</h1>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
             {appMode === "upload" && uploadResult && (
-              <button
-                onClick={handleNewUpload}
-                className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted rounded-lg transition-colors"
-              >
+              <button onClick={handleNewUpload}
+                className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted rounded-lg transition-colors">
                 <RefreshCcw className="w-4 h-4" />
-                <span>New Upload</span>
+                <span className="hidden sm:inline">New Upload</span>
               </button>
             )}
             <button
-              onClick={appMode === "reports" ? handleSwitchToUpload : handleSwitchToReports}
-              className={cn(
-                "flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors",
+              onClick={appMode === "reports" ? () => setAppMode("upload") : handleSwitchToReports}
+              className={cn("flex items-center space-x-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors",
                 appMode === "reports"
                   ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {appMode === "reports" ? (
-                <>
-                  <Upload className="w-4 h-4" />
-                  <span>Upload</span>
-                </>
-              ) : (
-                <>
-                  <BarChart3 className="w-4 h-4" />
-                  <span>Reports</span>
-                </>
-              )}
+                  : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground")}>
+              {appMode === "reports" ? <><Upload className="w-4 h-4" /><span>Upload</span></> : <><BarChart3 className="w-4 h-4" /><span>Reports</span></>}
             </button>
+            <div className="flex items-center space-x-2 pl-2 border-l border-border">
+              <div className="flex items-center space-x-1.5 text-sm text-muted-foreground">
+                <User className="w-4 h-4" />
+                <span className="hidden md:inline max-w-[120px] truncate">{displayName}</span>
+              </div>
+              <button onClick={logout} title="Log out"
+                className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors">
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -479,23 +749,14 @@ export default function Dashboard() {
         <AnimatePresence mode="wait">
           {/* ── REPORTS MODE ── */}
           {appMode === "reports" && (
-            <motion.div
-              key="reports-mode"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-            >
+            <motion.div key="reports-mode" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
               {reportsLoading ? (
                 <div className="flex flex-col items-center justify-center py-32 space-y-4">
                   <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                  <p className="text-muted-foreground">Loading saved records...</p>
+                  <p className="text-muted-foreground">Loading your saved records...</p>
                 </div>
-              ) : reportsData && (reportsData.salesRows.length > 0 || reportsData.purchaseRows.length > 0) ? (
-                <ResultsView
-                  data={reportsData}
-                  showDeleteButton
-                  onDelete={() => setShowDeleteModal(true)}
-                />
+              ) : displayReportsData && (displayReportsData.salesRows.length > 0 || displayReportsData.purchaseRows.length > 0) ? (
+                <ResultsView data={displayReportsData} onDataChange={handleReportsDataChange} />
               ) : (
                 <div className="flex flex-col items-center justify-center py-32 space-y-4 text-center">
                   <div className="p-6 bg-muted/50 rounded-full">
@@ -503,12 +764,10 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-lg text-foreground">No Records Yet</h3>
-                    <p className="text-muted-foreground mt-1">Upload your sales and purchase files to start reconciling.</p>
+                    <p className="text-muted-foreground mt-1">Upload files or add records manually to get started.</p>
                   </div>
-                  <button
-                    onClick={handleSwitchToUpload}
-                    className="flex items-center space-x-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors"
-                  >
+                  <button onClick={() => setAppMode("upload")}
+                    className="flex items-center space-x-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors">
                     <Upload className="w-4 h-4" />
                     <span>Go to Upload</span>
                   </button>
@@ -519,112 +778,90 @@ export default function Dashboard() {
 
           {/* ── UPLOAD MODE ── */}
           {appMode === "upload" && (
-            <motion.div
-              key="upload-mode"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-8"
-            >
-              {/* Upload Panel (hide after result) */}
+            <motion.div key="upload-mode" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
               <AnimatePresence>
                 {!uploadResult && (
-                  <motion.div
-                    key="upload-panel"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="bg-card rounded-2xl shadow-xl shadow-black/5 border border-border/50 overflow-hidden"
-                  >
+                  <motion.div key="upload-panel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }}
+                    className="bg-card rounded-2xl shadow-xl shadow-black/5 border border-border/50 overflow-hidden">
                     <div className="p-6 md:p-8 border-b border-border">
                       <h2 className="text-xl font-display font-bold text-foreground flex items-center space-x-2">
                         <LayoutDashboard className="w-6 h-6 text-primary" />
                         <span>Upload & Match</span>
                       </h2>
                       <p className="text-muted-foreground mt-1 text-sm">
-                        Matches purchase bills against <strong>all saved sales records</strong> (including previous uploads).
+                        Upload one or both files. Matching runs automatically against <strong>all your saved records</strong>.
                       </p>
                     </div>
 
                     <div className="p-6 md:p-8">
-                      {/* Upload Mode Toggle */}
+                      {/* Upload Mode Toggle — 3 options */}
                       <div className="flex rounded-xl overflow-hidden border border-border mb-8 w-fit">
-                        <button
-                          onClick={() => setUploadMode("both")}
-                          className={cn(
-                            "px-5 py-2.5 text-sm font-medium transition-colors",
-                            uploadMode === "both"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-card text-muted-foreground hover:text-foreground"
-                          )}
-                        >
-                          Sales + Purchase
-                        </button>
-                        <button
-                          onClick={() => { setUploadMode("purchase-only"); setSalesFile(null); }}
-                          className={cn(
-                            "px-5 py-2.5 text-sm font-medium transition-colors border-l border-border",
-                            uploadMode === "purchase-only"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-card text-muted-foreground hover:text-foreground"
-                          )}
-                        >
-                          Purchase Bills Only
-                        </button>
+                        {(["both", "sale-only", "purchase-only"] as UploadMode[]).map((mode, i) => (
+                          <button key={mode}
+                            onClick={() => {
+                              setUploadMode(mode);
+                              if (mode === "sale-only") setPurchaseFile(null);
+                              if (mode === "purchase-only") setSalesFile(null);
+                            }}
+                            className={cn(
+                              "px-5 py-2.5 text-sm font-medium transition-colors",
+                              i > 0 && "border-l border-border",
+                              uploadMode === mode ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"
+                            )}>
+                            {mode === "both" ? "Sales + Purchase" : mode === "sale-only" ? "Sales Only" : "Purchase Only"}
+                          </button>
+                        ))}
                       </div>
 
-                      <div className={cn("grid gap-8", uploadMode === "both" ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 max-w-lg")}>
-                        {uploadMode === "both" && (
+                      <div className={cn("grid gap-8",
+                        uploadMode === "both" ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 max-w-lg")}>
+                        {uploadMode !== "purchase-only" && (
                           <div className="space-y-3">
                             <label className="text-sm font-semibold text-foreground flex justify-between">
                               <span>Sales Data</span>
-                              <span className="text-muted-foreground font-normal">Step 1</span>
+                              {uploadMode === "both" && <span className="text-muted-foreground font-normal">Step 1</span>}
                             </label>
                             <FileDropzone label="Sales Excel" file={salesFile} onFileChange={setSalesFile} />
+                            {uploadMode === "sale-only" && (
+                              <p className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                                Sales will be added to your database. Matching runs against existing purchase records.
+                              </p>
+                            )}
                           </div>
                         )}
-                        <div className="space-y-3">
-                          <label className="text-sm font-semibold text-foreground flex justify-between">
-                            <span>Purchase Bills</span>
-                            {uploadMode === "both" && <span className="text-muted-foreground font-normal">Step 2</span>}
-                          </label>
-                          <FileDropzone label="Purchase Excel" file={purchaseFile} onFileChange={setPurchaseFile} />
-                        </div>
+                        {uploadMode !== "sale-only" && (
+                          <div className="space-y-3">
+                            <label className="text-sm font-semibold text-foreground flex justify-between">
+                              <span>Purchase Bills</span>
+                              {uploadMode === "both" && <span className="text-muted-foreground font-normal">Step 2</span>}
+                            </label>
+                            <FileDropzone label="Purchase Excel" file={purchaseFile} onFileChange={setPurchaseFile} />
+                            {uploadMode === "purchase-only" && (
+                              <p className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                                Purchase bills will be matched against all your previously uploaded sales records.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
 
-                      {uploadMode === "purchase-only" && (
-                        <p className="mt-4 text-sm text-muted-foreground flex items-center space-x-2">
-                          <AlertCircle className="w-4 h-4 shrink-0 text-amber-500" />
-                          <span>Purchase bills will be matched against <strong>all previously saved pending sales</strong>.</span>
-                        </p>
-                      )}
-
-                      {error && (
+                      {uploadError && (
                         <div className="mt-6 p-4 bg-destructive/10 border border-destructive/20 rounded-xl flex items-start space-x-3">
-                          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-destructive" />
-                          <div>
-                            <h4 className="font-semibold text-destructive text-sm">Matching Failed</h4>
-                            <p className="text-sm text-destructive/80 mt-0.5">{(error as { error?: string }).error || "An unknown error occurred"}</p>
-                          </div>
+                          <AlertTriangle className="w-5 h-5 text-destructive mt-0.5 shrink-0" />
+                          <p className="text-sm text-destructive">{uploadError}</p>
                         </div>
                       )}
 
-                      <div className="mt-8 flex justify-center">
-                        <button
-                          onClick={handleRun}
-                          disabled={isRunDisabled}
-                          className="flex items-center space-x-2 px-8 py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200 ease-out w-full md:w-auto"
-                        >
-                          {isPending ? (
-                            <>
-                              <Loader2 className="w-6 h-6 animate-spin" />
-                              <span>Processing...</span>
-                            </>
+                      <div className="mt-8 flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">
+                          Re-uploading the same date replaces only unmatched records for that date.
+                        </p>
+                        <button onClick={handleRun} disabled={isRunDisabled}
+                          className="flex items-center space-x-2 px-8 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md active:scale-[0.98]">
+                          {uploading ? (
+                            <><Loader2 className="w-5 h-5 animate-spin" /><span>Processing...</span></>
                           ) : (
-                            <>
-                              <CheckCircle2 className="w-6 h-6" />
-                              <span>Run Strict Match</span>
-                            </>
+                            <><ArrowRightLeft className="w-5 h-5" /><span>Run Match</span></>
                           )}
                         </button>
                       </div>
@@ -634,36 +871,15 @@ export default function Dashboard() {
               </AnimatePresence>
 
               {/* Upload Result */}
-              <AnimatePresence>
-                {uploadResult && (
-                  <motion.div
-                    key="upload-result"
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4 }}
-                  >
-                    <ResultsView
-                      data={uploadResult}
-                      showDeleteButton
-                      onDelete={() => setShowDeleteModal(true)}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {uploadResult && (
+                <motion.div key="result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                  <ResultsView data={uploadResult} onDataChange={setUploadResult} />
+                </motion.div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
       </main>
-
-      {/* Delete Modal */}
-      <AnimatePresence>
-        {showDeleteModal && (
-          <DeleteModal
-            onClose={() => setShowDeleteModal(false)}
-            onSuccess={handleDeleteSuccess}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }
