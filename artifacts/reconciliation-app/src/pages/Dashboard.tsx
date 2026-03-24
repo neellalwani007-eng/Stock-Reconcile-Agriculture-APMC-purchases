@@ -529,8 +529,8 @@ function ResultsView({
                 <th className="px-6 py-4 font-semibold text-right">Sales Amt</th>
                 <th className="px-6 py-4 font-semibold text-right">Purchase Qty</th>
                 <th className="px-6 py-4 font-semibold text-right">Purchase Amt</th>
-                <th className="px-6 py-4 font-semibold text-right text-amber-600 bg-amber-50">Pending Qty</th>
-                <th className="px-6 py-4 font-semibold text-right text-amber-600 bg-amber-50">Pending Amt</th>
+                <th className="px-6 py-4 font-semibold text-right text-amber-400 bg-amber-900/30">Pending Qty</th>
+                <th className="px-6 py-4 font-semibold text-right text-amber-400 bg-amber-900/30">Pending Amt</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -541,8 +541,8 @@ function ResultsView({
                   <td className="px-6 py-4 text-right">{formatCurrency(row.salesAmount)}</td>
                   <td className="px-6 py-4 text-right">{row.purchaseQty.toFixed(2)}</td>
                   <td className="px-6 py-4 text-right">{formatCurrency(row.purchaseAmount)}</td>
-                  <td className="px-6 py-4 text-right font-bold text-amber-600 bg-amber-50/50">{row.pendingQty.toFixed(2)}</td>
-                  <td className="px-6 py-4 text-right font-bold text-amber-600 bg-amber-50/50">{formatCurrency(row.pendingAmount)}</td>
+                  <td className="px-6 py-4 text-right font-bold text-amber-400 bg-amber-900/20">{row.pendingQty.toFixed(2)}</td>
+                  <td className="px-6 py-4 text-right font-bold text-amber-400 bg-amber-900/20">{formatCurrency(row.pendingAmount)}</td>
                 </tr>
               ))}
               {data.summary.length === 0 && (
@@ -870,7 +870,7 @@ export default function Dashboard() {
                             </label>
                             <FileDropzone label="Sales Excel" files={salesFiles} onFilesChange={setSalesFiles} />
                             {uploadMode === "sale-only" && (
-                              <p className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                              <p className="text-xs text-muted-foreground bg-white/5 border border-white/15 rounded-lg px-3 py-2">
                                 Sales will be added to your database. Matching runs against existing purchase records.
                               </p>
                             )}
@@ -884,7 +884,7 @@ export default function Dashboard() {
                             </label>
                             <FileDropzone label="Purchase Excel" files={purchaseFiles} onFilesChange={setPurchaseFiles} />
                             {uploadMode === "purchase-only" && (
-                              <p className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                              <p className="text-xs text-muted-foreground bg-white/5 border border-white/15 rounded-lg px-3 py-2">
                                 Purchase data will be matched against all your previously uploaded sales records.
                               </p>
                             )}

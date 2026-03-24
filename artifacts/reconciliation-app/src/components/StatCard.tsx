@@ -10,12 +10,12 @@ interface StatCardProps {
 }
 
 export function StatCard({ title, value, icon, description, variant = "default" }: StatCardProps) {
-  
+
   const colors = {
-    default: "text-primary bg-primary/10",
-    success: "text-emerald-600 bg-emerald-100",
-    warning: "text-amber-600 bg-amber-100",
-    destructive: "text-rose-600 bg-rose-100",
+    default:     "text-primary bg-primary/20",
+    success:     "text-emerald-400 bg-emerald-900/40",
+    warning:     "text-amber-400 bg-amber-900/40",
+    destructive: "text-rose-400 bg-rose-900/40",
   };
 
   return (
