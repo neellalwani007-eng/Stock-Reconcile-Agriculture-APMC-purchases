@@ -196,8 +196,27 @@ function DeleteByDateModal({
 /* ── Add Sale Modal ── */
 function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (data: ReconciliationResult) => void }) {
   const [form, setForm] = useState({ saleDate: "", item: "", qty: "", rate: "", amount: "" });
+  const [amountManual, setAmountManual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const handleFieldChange = (key: string, value: string) => {
+    setForm((f) => {
+      const next = { ...f, [key]: value };
+      if ((key === "qty" || key === "rate") && !amountManual) {
+        const q = parseFloat(key === "qty" ? value : f.qty);
+        const r = parseFloat(key === "rate" ? value : f.rate);
+        if (!isNaN(q) && !isNaN(r)) next.amount = (q * r).toFixed(2);
+        else next.amount = "";
+      }
+      return next;
+    });
+  };
+
+  const handleAmountChange = (value: string) => {
+    setAmountManual(true);
+    setForm((f) => ({ ...f, amount: value }));
+  };
 
   const handleSubmit = async () => {
     if (!form.saleDate || !form.item || !form.qty || !form.rate || !form.amount) {
@@ -227,6 +246,8 @@ function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
     }
   };
 
+  const inputCls = "w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm";
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <motion.div
@@ -250,27 +271,30 @@ function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sale Date</label>
-              <input type="date" value={form.saleDate} onChange={(e) => setForm((f) => ({ ...f, saleDate: e.target.value }))}
-                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+              <input type="date" value={form.saleDate} onChange={(e) => handleFieldChange("saleDate", e.target.value)} className={inputCls} />
             </div>
             <div className="col-span-2 space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Item / Commodity</label>
-              <input type="text" placeholder="e.g. Onion" value={form.item} onChange={(e) => setForm((f) => ({ ...f, item: e.target.value }))}
-                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+              <input type="text" placeholder="e.g. Onion" value={form.item} onChange={(e) => handleFieldChange("item", e.target.value)} className={inputCls} />
             </div>
-            {[
-              { key: "qty", label: "Qty (QTL)", placeholder: "0.00" },
-              { key: "rate", label: "Rate", placeholder: "0.00" },
-              { key: "amount", label: "Amount", placeholder: "0.00" },
-            ].map(({ key, label, placeholder }) => (
-              <div key={key} className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
-                <input type="number" step="0.01" placeholder={placeholder}
-                  value={form[key as keyof typeof form]}
-                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
-              </div>
-            ))}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Qty (QTL)</label>
+              <input type="number" step="0.01" placeholder="0.00" value={form.qty} onChange={(e) => handleFieldChange("qty", e.target.value)} className={inputCls} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rate</label>
+              <input type="number" step="0.01" placeholder="0.00" value={form.rate} onChange={(e) => handleFieldChange("rate", e.target.value)} className={inputCls} />
+            </div>
+            <div className="col-span-2 space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center justify-between">
+                <span>Amount</span>
+                {!amountManual && form.qty && form.rate && (
+                  <span className="text-[10px] text-primary font-normal normal-case">Auto-calculated · editable</span>
+                )}
+              </label>
+              <input type="number" step="0.01" placeholder="0.00" value={form.amount}
+                onChange={(e) => handleAmountChange(e.target.value)} className={inputCls} />
+            </div>
           </div>
           {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
         </div>
@@ -290,8 +314,27 @@ function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
 /* ── Add Purchase Modal ── */
 function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (data: ReconciliationResult) => void }) {
   const [form, setForm] = useState({ billDate: "", purchaseDate: "", item: "", qty: "", rate: "", amount: "" });
+  const [amountManual, setAmountManual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const handleFieldChange = (key: string, value: string) => {
+    setForm((f) => {
+      const next = { ...f, [key]: value };
+      if ((key === "qty" || key === "rate") && !amountManual) {
+        const q = parseFloat(key === "qty" ? value : f.qty);
+        const r = parseFloat(key === "rate" ? value : f.rate);
+        if (!isNaN(q) && !isNaN(r)) next.amount = (q * r).toFixed(2);
+        else next.amount = "";
+      }
+      return next;
+    });
+  };
+
+  const handleAmountChange = (value: string) => {
+    setAmountManual(true);
+    setForm((f) => ({ ...f, amount: value }));
+  };
 
   const handleSubmit = async () => {
     if (!form.billDate || !form.purchaseDate || !form.item || !form.qty || !form.rate || !form.amount) {
@@ -322,6 +365,8 @@ function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSucce
     }
   };
 
+  const inputCls = "w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm";
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <motion.div
@@ -345,32 +390,34 @@ function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSucce
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bill Date</label>
-              <input type="date" value={form.billDate} onChange={(e) => setForm((f) => ({ ...f, billDate: e.target.value }))}
-                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+              <input type="date" value={form.billDate} onChange={(e) => handleFieldChange("billDate", e.target.value)} className={inputCls} />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Purchase Date</label>
-              <input type="date" value={form.purchaseDate} onChange={(e) => setForm((f) => ({ ...f, purchaseDate: e.target.value }))}
-                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+              <input type="date" value={form.purchaseDate} onChange={(e) => handleFieldChange("purchaseDate", e.target.value)} className={inputCls} />
             </div>
             <div className="col-span-2 space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Item / Commodity</label>
-              <input type="text" placeholder="e.g. Corn" value={form.item} onChange={(e) => setForm((f) => ({ ...f, item: e.target.value }))}
-                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
+              <input type="text" placeholder="e.g. Corn" value={form.item} onChange={(e) => handleFieldChange("item", e.target.value)} className={inputCls} />
             </div>
-            {[
-              { key: "qty", label: "Qty (QTL)", placeholder: "0.00" },
-              { key: "rate", label: "Rate", placeholder: "0.00" },
-              { key: "amount", label: "Amount", placeholder: "0.00" },
-            ].map(({ key, label, placeholder }) => (
-              <div key={key} className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
-                <input type="number" step="0.01" placeholder={placeholder}
-                  value={form[key as keyof typeof form]}
-                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm" />
-              </div>
-            ))}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Qty (QTL)</label>
+              <input type="number" step="0.01" placeholder="0.00" value={form.qty} onChange={(e) => handleFieldChange("qty", e.target.value)} className={inputCls} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rate</label>
+              <input type="number" step="0.01" placeholder="0.00" value={form.rate} onChange={(e) => handleFieldChange("rate", e.target.value)} className={inputCls} />
+            </div>
+            <div className="col-span-2 space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center justify-between">
+                <span>Amount</span>
+                {!amountManual && form.qty && form.rate && (
+                  <span className="text-[10px] text-primary font-normal normal-case">Auto-calculated · editable</span>
+                )}
+              </label>
+              <input type="number" step="0.01" placeholder="0.00" value={form.amount}
+                onChange={(e) => handleAmountChange(e.target.value)} className={inputCls} />
+            </div>
           </div>
           {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
         </div>
@@ -422,8 +469,8 @@ function ResultsView({
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard title="Exactly Matched Lots" value={data.matchedCount} icon={<CheckCircle2 className="w-8 h-8" />} variant="success" />
-        <StatCard title="Pending Farmer Payments" value={data.pendingCount} icon={<Clock className="w-8 h-8" />} variant="warning" description="Sale rows without purchase bills" />
-        <StatCard title="Unmatched Purchases" value={data.unmatchedPurchaseCount} icon={<AlertCircle className="w-8 h-8" />} variant="destructive" description="Purchase bills without sale entries" />
+        <StatCard title="Pending Farmer Payments" value={data.pendingCount} icon={<Clock className="w-8 h-8" />} variant="warning" description="Sale rows without purchase data" />
+        <StatCard title="Unmatched Purchases" value={data.unmatchedPurchaseCount} icon={<AlertCircle className="w-8 h-8" />} variant="destructive" description="Purchase data without sale entries" />
       </div>
 
       {/* Downloads + Quick Actions */}
@@ -609,7 +656,7 @@ function ResultsView({
                     </tr>
                   ))}
                 {data.purchaseRows.filter((r) => r.status !== "Matched").length === 0 && (
-                  <tr><td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">All purchase bills matched</td></tr>
+                  <tr><td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">All purchase records matched</td></tr>
                 )}
               </tbody>
             </table>
@@ -639,8 +686,8 @@ export default function Dashboard() {
   const { user, logout } = useAuth();
   const [appMode, setAppMode] = useState<AppMode>("upload");
   const [uploadMode, setUploadMode] = useState<UploadMode>("both");
-  const [salesFile, setSalesFile] = useState<File | null>(null);
-  const [purchaseFile, setPurchaseFile] = useState<File | null>(null);
+  const [salesFiles, setSalesFiles] = useState<File[]>([]);
+  const [purchaseFiles, setPurchaseFiles] = useState<File[]>([]);
   const [uploadResult, setUploadResult] = useState<ReconciliationResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -652,16 +699,16 @@ export default function Dashboard() {
   const [liveReportsData, setLiveReportsData] = useState<ReconciliationResult | null>(null);
 
   const handleRun = async () => {
-    if (uploadMode === "both" && (!salesFile || !purchaseFile)) return;
-    if (uploadMode === "sale-only" && !salesFile) return;
-    if (uploadMode === "purchase-only" && !purchaseFile) return;
+    if (uploadMode === "both" && (salesFiles.length === 0 || purchaseFiles.length === 0)) return;
+    if (uploadMode === "sale-only" && salesFiles.length === 0) return;
+    if (uploadMode === "purchase-only" && purchaseFiles.length === 0) return;
 
     setUploadError("");
     setUploading(true);
     try {
       const formData = new FormData();
-      if (salesFile && uploadMode !== "purchase-only") formData.append("salesFile", salesFile);
-      if (purchaseFile && uploadMode !== "sale-only") formData.append("purchaseFile", purchaseFile);
+      if (uploadMode !== "purchase-only") salesFiles.forEach((f) => formData.append("salesFile", f));
+      if (uploadMode !== "sale-only") purchaseFiles.forEach((f) => formData.append("purchaseFile", f));
 
       const res = await fetch(`${BASE}/api/reconciliation/run`, {
         method: "POST",
@@ -679,8 +726,8 @@ export default function Dashboard() {
   };
 
   const handleNewUpload = () => {
-    setSalesFile(null);
-    setPurchaseFile(null);
+    setSalesFiles([]);
+    setPurchaseFiles([]);
     setUploadResult(null);
     setUploadError("");
   };
@@ -697,9 +744,9 @@ export default function Dashboard() {
 
   const isRunDisabled =
     uploading ||
-    (uploadMode === "both" && (!salesFile || !purchaseFile)) ||
-    (uploadMode === "sale-only" && !salesFile) ||
-    (uploadMode === "purchase-only" && !purchaseFile);
+    (uploadMode === "both" && (salesFiles.length === 0 || purchaseFiles.length === 0)) ||
+    (uploadMode === "sale-only" && salesFiles.length === 0) ||
+    (uploadMode === "purchase-only" && purchaseFiles.length === 0);
 
   const displayName = user?.firstName || user?.email?.split("@")[0] || "User";
   const displayReportsData = liveReportsData ?? reportsData;
@@ -800,8 +847,8 @@ export default function Dashboard() {
                           <button key={mode}
                             onClick={() => {
                               setUploadMode(mode);
-                              if (mode === "sale-only") setPurchaseFile(null);
-                              if (mode === "purchase-only") setSalesFile(null);
+                              if (mode === "sale-only") setPurchaseFiles([]);
+                              if (mode === "purchase-only") setSalesFiles([]);
                             }}
                             className={cn(
                               "px-5 py-2.5 text-sm font-medium transition-colors",
@@ -821,7 +868,7 @@ export default function Dashboard() {
                               <span>Sales Data</span>
                               {uploadMode === "both" && <span className="text-muted-foreground font-normal">Step 1</span>}
                             </label>
-                            <FileDropzone label="Sales Excel" file={salesFile} onFileChange={setSalesFile} />
+                            <FileDropzone label="Sales Excel" files={salesFiles} onFilesChange={setSalesFiles} />
                             {uploadMode === "sale-only" && (
                               <p className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
                                 Sales will be added to your database. Matching runs against existing purchase records.
@@ -832,13 +879,13 @@ export default function Dashboard() {
                         {uploadMode !== "sale-only" && (
                           <div className="space-y-3">
                             <label className="text-sm font-semibold text-foreground flex justify-between">
-                              <span>Purchase Bills</span>
+                              <span>Purchase Data</span>
                               {uploadMode === "both" && <span className="text-muted-foreground font-normal">Step 2</span>}
                             </label>
-                            <FileDropzone label="Purchase Excel" file={purchaseFile} onFileChange={setPurchaseFile} />
+                            <FileDropzone label="Purchase Excel" files={purchaseFiles} onFilesChange={setPurchaseFiles} />
                             {uploadMode === "purchase-only" && (
                               <p className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-                                Purchase bills will be matched against all your previously uploaded sales records.
+                                Purchase data will be matched against all your previously uploaded sales records.
                               </p>
                             )}
                           </div>

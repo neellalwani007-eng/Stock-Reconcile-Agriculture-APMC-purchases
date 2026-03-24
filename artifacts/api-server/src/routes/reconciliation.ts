@@ -136,11 +136,11 @@ router.post(
         return;
       }
 
-      // Process sales file if provided
+      // Process sales files if provided
       if (files["salesFile"]) {
-        const newSalesRows = parseSalesSheet(files["salesFile"][0].buffer);
+        const newSalesRows = parseSalesFiles(files["salesFile"]);
         if (newSalesRows.length === 0) {
-          res.status(400).json({ error: "Sales file appears empty or headers not recognized. Expected: Sale Date, Item, Qty, Rate, Amount" });
+          res.status(400).json({ error: "Sales file(s) appear empty or headers not recognized. Expected: Sale Date, Item, Qty, Rate, Amount" });
           return;
         }
         // Deduplication: for each unique date in the file, remove existing Pending sales for that date
@@ -168,11 +168,11 @@ router.post(
         );
       }
 
-      // Process purchase file if provided
+      // Process purchase files if provided
       if (files["purchaseFile"]) {
-        const newPurchaseRows = parsePurchaseSheet(files["purchaseFile"][0].buffer);
+        const newPurchaseRows = parsePurchaseFiles(files["purchaseFile"]);
         if (newPurchaseRows.length === 0) {
-          res.status(400).json({ error: "Purchase file appears empty or headers not recognized. Expected: Date, Purchase Date, Item, QTY, Rate, Amount" });
+          res.status(400).json({ error: "Purchase file(s) appear empty or headers not recognized. Expected: Date, Purchase Date, Item, QTY, Rate, Amount" });
           return;
         }
         // Deduplication: for each unique bill date in the file, remove existing Unmatched purchases
