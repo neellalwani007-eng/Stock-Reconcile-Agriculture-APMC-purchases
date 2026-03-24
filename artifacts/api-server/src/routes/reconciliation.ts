@@ -202,11 +202,9 @@ router.post(
           });
           return;
         }
-        // Dedup: remove existing Pending sales for dates in the file
+        // Dedup: remove ALL existing sales for dates in the file (regardless of status)
         const datesInFile = new Set(newSalesRows.map((r) => r.saleDate));
-        data.sales = data.sales.filter(
-          (s) => s.status !== "Pending" || !datesInFile.has(s.saleDate),
-        );
+        data.sales = data.sales.filter((s) => !datesInFile.has(s.saleDate));
         // Insert new rows
         for (const r of newSalesRows) {
           data.sales.push({
@@ -231,11 +229,9 @@ router.post(
           });
           return;
         }
-        // Dedup: remove existing Unmatched purchases for bill dates in the file
+        // Dedup: remove ALL existing purchases for bill dates in the file (regardless of status)
         const datesInFile = new Set(newPurchaseRows.map((r) => r.billDate));
-        data.purchases = data.purchases.filter(
-          (p) => p.status !== "Unmatched" || !datesInFile.has(p.billDate),
-        );
+        data.purchases = data.purchases.filter((p) => !datesInFile.has(p.billDate));
         // Insert new rows
         for (const r of newPurchaseRows) {
           data.purchases.push({
