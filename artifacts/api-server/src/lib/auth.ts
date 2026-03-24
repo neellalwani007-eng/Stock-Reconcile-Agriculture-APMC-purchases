@@ -1,11 +1,10 @@
-import * as client from "openid-client";
+import { google } from "googleapis";
 import crypto from "crypto";
 import { type Request, type Response } from "express";
 import { db, sessionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type { AuthUser } from "@workspace/api-zod";
 
-export const ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
 export const SESSION_COOKIE = "sid";
 export const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
 
@@ -16,16 +15,33 @@ export interface SessionData {
   expires_at?: number;
 }
 
-let oidcConfig: client.Configuration | null = null;
+export function createGoogleOAuth2Client(redirectUri?: string) {
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri,
+  );
+}
 
-export async function getOidcConfig(): Promise<client.Configuration> {
-  if (!oidcConfig) {
-    oidcConfig = await client.discovery(
-      new URL(ISSUER_URL),
-      process.env.REPL_ID!,
-    );
+export async function refreshGoogleTokens(
+  session: SessionData,
+): Promise<SessionData | null> {
+  if (!session.refresh_token) return null;
+  try {
+    const client = createGoogleOAuth2Client();
+    client.setCredentials({ refresh_token: session.refresh_token });
+    const { credentials } = await client.refreshAccessToken();
+    return {
+      ...session,
+      access_token: credentials.access_token ?? session.access_token,
+      refresh_token: credentials.refresh_token ?? session.refresh_token,
+      expires_at: credentials.expiry_date
+        ? Math.floor(credentials.expiry_date / 1000)
+        : session.expires_at,
+    };
+  } catch {
+    return null;
   }
-  return oidcConfig;
 }
 
 export async function createSession(data: SessionData): Promise<string> {

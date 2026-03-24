@@ -11,7 +11,9 @@ pnpm workspace monorepo using TypeScript. Agricultural Trading Reconciliation Sy
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM (provisioned but not used for reconciliation — stateless file processing)
+- **Authentication**: Direct Google OAuth 2.0 (replaces Replit Auth/OIDC)
+- **Storage**: Google Drive appdata folder per user (via `googleapis`) — zero DB cost per user
+- **Database**: PostgreSQL + Drizzle ORM — used only for sessions table (auth tokens); sale/purchase data lives in Drive
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
