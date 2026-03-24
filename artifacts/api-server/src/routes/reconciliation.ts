@@ -494,6 +494,15 @@ router.delete("/records/date", async (req: Request, res: Response) => {
   }
 });
 
+// FY helpers
+function getFYFromDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const month = d.getMonth() + 1;
+  const year = d.getFullYear();
+  if (month >= 4) return `${year}-${String(year + 1).slice(-2)}`;
+  return `${year - 1}-${String(year).slice(-2)}`;
+}
+
 // POST /reconciliation/download/:fileType
 router.post("/download/:fileType", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) {
@@ -506,10 +515,19 @@ router.post("/download/:fileType", async (req: Request, res: Response) => {
   };
   try {
     const { fileType } = req.params;
+    const { fy } = req.body as { fy?: string };
     const data = await getDataFromDrive(authedReq);
+
+    const filteredSales = fy
+      ? data.sales.filter((s) => getFYFromDate(s.saleDate) === fy)
+      : data.sales;
+    const filteredPurchases = fy
+      ? data.purchases.filter((p) => getFYFromDate(p.billDate) === fy)
+      : data.purchases;
+
     const result = buildResult(
-      data.sales.map(drSaleToRow),
-      data.purchases.map(drPurchaseToRow),
+      filteredSales.map(drSaleToRow),
+      filteredPurchases.map(drPurchaseToRow),
     );
 
     let buffer: Buffer;

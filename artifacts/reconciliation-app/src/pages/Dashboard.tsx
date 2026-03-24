@@ -19,6 +19,7 @@ import {
   LogOut,
   User,
   CalendarX,
+  ChevronDown,
 } from "lucide-react";
 import { useGetReports } from "@workspace/api-client-react";
 import type { ReconciliationResult, SaleRow, PurchaseRow } from "@workspace/api-client-react";
@@ -45,17 +46,69 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return res.json() as Promise<ReconciliationResult>;
 }
 
+/* ── Financial Year Helpers ── */
+function getCurrentFY(): string {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  if (month >= 4) return `${year}-${String(year + 1).slice(-2)}`;
+  return `${year - 1}-${String(year).slice(-2)}`;
+}
+
+function getAvailableFYs(): string[] {
+  const currentStart = parseInt(getCurrentFY().split("-")[0]);
+  const fys: string[] = [];
+  for (let y = 2020; y <= currentStart; y++) {
+    fys.push(`${y}-${String(y + 1).slice(-2)}`);
+  }
+  return fys;
+}
+
+function getFYFromDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const month = d.getMonth() + 1;
+  const year = d.getFullYear();
+  if (month >= 4) return `${year}-${String(year + 1).slice(-2)}`;
+  return `${year - 1}-${String(year).slice(-2)}`;
+}
+
+function filterResultByFY(result: ReconciliationResult, fy: string): ReconciliationResult {
+  const sales = result.salesRows.filter((r) => getFYFromDate(r.saleDate) === fy);
+  const purchases = result.purchaseRows.filter((r) => getFYFromDate(r.billDate) === fy);
+
+  const matchedCount = sales.filter((r) => r.status === "Matched").length;
+  const pendingCount = sales.filter((r) => r.status === "Pending").length;
+  const unmatchedPurchaseCount = purchases.filter((r) => r.status !== "Matched").length;
+
+  type SummaryEntry = { salesQty: number; salesAmount: number; purchaseQty: number; purchaseAmount: number; pendingQty: number; pendingAmount: number };
+  const map = new Map<string, SummaryEntry>();
+  const getEntry = (item: string) => map.get(item) ?? (map.set(item, { salesQty: 0, salesAmount: 0, purchaseQty: 0, purchaseAmount: 0, pendingQty: 0, pendingAmount: 0 }), map.get(item)!);
+
+  for (const s of sales) {
+    const e = getEntry(s.item);
+    e.salesQty += s.qty; e.salesAmount += s.amount;
+    if (s.status === "Pending") { e.pendingQty += s.qty; e.pendingAmount += s.amount; }
+  }
+  for (const p of purchases) {
+    const e = getEntry(p.item);
+    e.purchaseQty += p.qty; e.purchaseAmount += p.amount;
+  }
+
+  const summary = Array.from(map.entries()).map(([item, data]) => ({ item, ...data }));
+  return { salesRows: sales, purchaseRows: purchases, matchedCount, pendingCount, unmatchedPurchaseCount, summary };
+}
+
 function useReconciliationDownloads() {
   const [downloading, setDownloading] = useState<string | null>(null);
 
-  const handleDownload = async (fileType: string, filename: string) => {
+  const handleDownload = async (fileType: string, filename: string, fy?: string) => {
     try {
       setDownloading(fileType);
       const res = await fetch(`${BASE}/api/reconciliation/download/${fileType}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ fy }),
       });
       if (!res.ok) throw new Error("Download failed");
       const blob = await res.blob();
@@ -438,9 +491,11 @@ function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 function ResultsView({
   data,
   onDataChange,
+  selectedFY,
 }: {
   data: ReconciliationResult;
   onDataChange: (data: ReconciliationResult) => void;
+  selectedFY: string;
 }) {
   const [activeTab, setActiveTab] = useState<"sales" | "purchase" | "pending">("sales");
   const [showDeleteByDate, setShowDeleteByDate] = useState(false);
@@ -494,12 +549,12 @@ function ResultsView({
         </div>
         <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { id: "updated-sales", label: "Updated Sales", desc: "With Bill Dates", filename: "updated_sales.xlsx" },
-            { id: "pending-pavati", label: "Pending Pavati", desc: "Farmers awaiting payment", filename: "pending_pavati.xlsx" },
-            { id: "datewise-report", label: "Date-wise Report", desc: "Grouped by sale date", filename: "datewise_report.xlsx" },
-            { id: "purchase-exceptions", label: "Purchase Exceptions", desc: "Unmatched/Extra entries", filename: "purchase_exceptions.xlsx" },
+            { id: "updated-sales", label: "Updated Sales", desc: "With Bill Dates", filename: `updated_sales_${selectedFY}.xlsx` },
+            { id: "pending-pavati", label: "Pending Pavati", desc: "Farmers awaiting payment", filename: `pending_pavati_${selectedFY}.xlsx` },
+            { id: "datewise-report", label: "Date-wise Report", desc: "Grouped by sale date", filename: `datewise_report_${selectedFY}.xlsx` },
+            { id: "purchase-exceptions", label: "Purchase Exceptions", desc: "Unmatched/Extra entries", filename: `purchase_exceptions_${selectedFY}.xlsx` },
           ].map((btn) => (
-            <button key={btn.id} onClick={() => handleDownload(btn.id, btn.filename)} disabled={downloading !== null}
+            <button key={btn.id} onClick={() => handleDownload(btn.id, btn.filename, selectedFY)} disabled={downloading !== null}
               className="flex flex-col items-center justify-center p-4 border border-border rounded-xl hover:border-primary hover:bg-primary/5 transition-all text-center group">
               {downloading === btn.id ? (
                 <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
@@ -691,6 +746,8 @@ export default function Dashboard() {
   const [uploadResult, setUploadResult] = useState<ReconciliationResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [selectedFY, setSelectedFY] = useState<string>(getCurrentFY());
+  const availableFYs = getAvailableFYs();
 
   const { data: reportsData, isLoading: reportsLoading, refetch: refetchReports } = useGetReports({
     query: { enabled: appMode === "reports" },
@@ -749,7 +806,9 @@ export default function Dashboard() {
     (uploadMode === "purchase-only" && purchaseFiles.length === 0);
 
   const displayName = user?.firstName || user?.email?.split("@")[0] || "User";
-  const displayReportsData = liveReportsData ?? reportsData;
+  const rawReportsData = liveReportsData ?? reportsData;
+  const displayReportsData = rawReportsData ? filterResultByFY(rawReportsData, selectedFY) : null;
+  const displayUploadResult = uploadResult ? filterResultByFY(uploadResult, selectedFY) : null;
 
   return (
     <div className="min-h-screen pb-20">
@@ -770,6 +829,19 @@ export default function Dashboard() {
                 <span className="hidden sm:inline">New Upload</span>
               </button>
             )}
+            {/* FY Selector */}
+            <div className="relative flex items-center">
+              <select
+                value={selectedFY}
+                onChange={(e) => setSelectedFY(e.target.value)}
+                className="appearance-none bg-muted/50 hover:bg-muted border border-border text-foreground text-sm font-medium pl-3 pr-8 py-2 rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {availableFYs.map((fy) => (
+                  <option key={fy} value={fy}>FY {fy}</option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 pointer-events-none" />
+            </div>
             <button
               onClick={appMode === "reports" ? () => setAppMode("upload") : handleSwitchToReports}
               className={cn("flex items-center space-x-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors",
@@ -803,15 +875,15 @@ export default function Dashboard() {
                   <p className="text-muted-foreground">Loading your saved records...</p>
                 </div>
               ) : displayReportsData && (displayReportsData.salesRows.length > 0 || displayReportsData.purchaseRows.length > 0) ? (
-                <ResultsView data={displayReportsData} onDataChange={handleReportsDataChange} />
+                <ResultsView data={displayReportsData} onDataChange={handleReportsDataChange} selectedFY={selectedFY} />
               ) : (
                 <div className="flex flex-col items-center justify-center py-32 space-y-4 text-center">
                   <div className="p-6 bg-muted/50 rounded-full">
                     <FileSpreadsheet className="w-12 h-12 text-muted-foreground" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-lg text-foreground">No Records Yet</h3>
-                    <p className="text-muted-foreground mt-1">Upload files or add records manually to get started.</p>
+                    <h3 className="font-semibold text-lg text-foreground">No Records for FY {selectedFY}</h3>
+                    <p className="text-muted-foreground mt-1">Upload files with dates in this financial year or select a different FY from the dropdown.</p>
                   </div>
                   <button onClick={() => setAppMode("upload")}
                     className="flex items-center space-x-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors">
@@ -918,9 +990,9 @@ export default function Dashboard() {
               </AnimatePresence>
 
               {/* Upload Result */}
-              {uploadResult && (
+              {uploadResult && displayUploadResult && (
                 <motion.div key="result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                  <ResultsView data={uploadResult} onDataChange={setUploadResult} />
+                  <ResultsView data={displayUploadResult} onDataChange={setUploadResult} selectedFY={selectedFY} />
                 </motion.div>
               )}
             </motion.div>
