@@ -181,7 +181,7 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
   return rows;
 }
 
-const AMOUNT_TOLERANCE = 0.2;
+const AMOUNT_TOLERANCE = 0.02;
 
 function lotsMatch(
   saleQty: number, saleRate: number, saleAmount: number,
