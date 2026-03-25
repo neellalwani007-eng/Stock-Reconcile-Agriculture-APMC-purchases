@@ -476,15 +476,15 @@ export function buildMonthlyMatrixExcel(
         const isCarryForward = cfSdSet.has(saleDate);
 
         // Bill Qty:
-        //   carry-forward rows → opPay (what was pending at start of month)
-        //   this month's rows  → total sales qty on this date this month
+        //   carry-forward rows → opPay (the pending opening balance for this month)
+        //   this month's rows  → total sales qty/amount on this date
         const billQty = isCarryForward
           ? opPay
           : itemSales
               .filter((r) => r.saleDate === saleDate)
               .reduce((a, r) => a + (mode === "qty" ? r.qty : r.amount), 0);
 
-        // Matched values per bill date in this month
+        // Matched values per bill date column
         const rowValues: number[] = billDates.map((bd) => {
           const key: CellKey = `${saleDate}|${bd}`;
           return cellMap.get(key) ?? 0;
@@ -492,10 +492,12 @@ export function buildMonthlyMatrixExcel(
 
         const rowTotal = rowValues.reduce((a, v) => a + v, 0);
 
-        // Pending Pay = what remains unmatched at END of this month
-        //   carry-forward: opPay - rowTotal  (pending from before, minus what's settled now)
-        //   this month:    billQty - rowTotal (sales this month, minus what's matched)
-        const pendingPay = Math.max(0, billQty - rowTotal);
+        // Pending Pay — only what is still unpaid at end of this month:
+        //   carry-forward rows: Op Pay  − Total  (opening balance minus what was settled this month)
+        //   current month rows: Bill Qty − Total  (total sales minus what was matched this month)
+        const pendingPay = isCarryForward
+          ? Math.max(0, opPay - rowTotal)
+          : Math.max(0, billQty - rowTotal);
 
         const row: (string | number)[] = [
           label,
