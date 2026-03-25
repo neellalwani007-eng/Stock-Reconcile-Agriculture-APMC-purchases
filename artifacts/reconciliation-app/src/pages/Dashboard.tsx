@@ -999,9 +999,9 @@ function ResultsView({ data, onDataChange, selectedFY }: {
     <div className="space-y-6">
       {/* Summary stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={<CheckCircle2 className="w-5 h-5" />} label="Matched" value={data.matchedCount} color="green" />
-        <StatCard icon={<Clock className="w-5 h-5" />} label="Pending" value={data.pendingCount} color="amber" />
-        <StatCard icon={<AlertCircle className="w-5 h-5" />} label="Exceptions" value={data.unmatchedPurchaseCount} color="red" />
+        <StatCard icon={<CheckCircle2 className="w-5 h-5" />} label="Lots Matched" value={data.matchedCount} color="green" />
+        <StatCard icon={<Clock className="w-5 h-5" />} label="Pending Pavati" value={data.pendingCount} color="amber" />
+        <StatCard icon={<AlertCircle className="w-5 h-5" />} label="Unmatched Purchase" value={data.unmatchedPurchaseCount} color="red" />
         <StatCard icon={<CheckCircle2 className="w-5 h-5" />} label="Total Sales" value={data.salesRows.length} color="blue" />
       </div>
 
