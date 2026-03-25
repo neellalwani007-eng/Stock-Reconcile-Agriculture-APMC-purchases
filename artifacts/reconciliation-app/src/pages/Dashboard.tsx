@@ -76,9 +76,45 @@ function getFYFromDate(dateStr: string): string {
   return `${year - 1}-${String(year).slice(-2)}`;
 }
 
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function monthKey(dateStr: string) { return dateStr ? dateStr.slice(0, 7) : ""; }
+
+function monthLabel(key: string) {
+  const [y, m] = key.split("-");
+  return `${MONTH_NAMES[parseInt(m) - 1]} ${y}`;
+}
+
 function filterResultByFY(result: ReconciliationResult, fy: string): ReconciliationResult {
   const sales = result.salesRows.filter((r) => getFYFromDate(r.saleDate) === fy);
   const purchases = result.purchaseRows.filter((r) => getFYFromDate(r.billDate) === fy);
+
+  const matchedCount = sales.filter((r) => r.status === "Matched").length;
+  const pendingCount = sales.filter((r) => r.status === "Pending").length;
+  const unmatchedPurchaseCount = purchases.filter((r) => r.status !== "Matched").length;
+
+  type SummaryEntry = { salesQty: number; salesAmount: number; purchaseQty: number; purchaseAmount: number; pendingQty: number; pendingAmount: number };
+  const map = new Map<string, SummaryEntry>();
+  const getEntry = (item: string) => map.get(item) ?? (map.set(item, { salesQty: 0, salesAmount: 0, purchaseQty: 0, purchaseAmount: 0, pendingQty: 0, pendingAmount: 0 }), map.get(item)!);
+
+  for (const s of sales) {
+    const e = getEntry(s.item);
+    e.salesQty += s.qty; e.salesAmount += s.amount;
+    if (s.status === "Pending") { e.pendingQty += s.qty; e.pendingAmount += s.amount; }
+  }
+  for (const p of purchases) {
+    const e = getEntry(p.item);
+    e.purchaseQty += p.qty; e.purchaseAmount += p.amount;
+  }
+
+  const summary = Array.from(map.entries()).map(([item, data]) => ({ item, ...data }));
+  return { salesRows: sales, purchaseRows: purchases, matchedCount, pendingCount, unmatchedPurchaseCount, summary };
+}
+
+function filterResultByMonth(result: ReconciliationResult, month: string): ReconciliationResult {
+  if (!month) return result;
+  const sales = result.salesRows.filter((r) => monthKey(r.saleDate) === month);
+  const purchases = result.purchaseRows.filter((r) => monthKey(r.billDate) === month);
 
   const matchedCount = sales.filter((r) => r.status === "Matched").length;
   const pendingCount = sales.filter((r) => r.status === "Pending").length;
@@ -843,6 +879,7 @@ export default function Dashboard() {
   const [uploadError, setUploadError] = useState("");
   const [showFormatGuide, setShowFormatGuide] = useState(false);
   const [selectedFY, setSelectedFY] = useState<string>(getCurrentFY());
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
   const availableFYs = getAvailableFYs();
 
   const { data: reportsData, isLoading: reportsLoading, refetch: refetchReports, error: reportsError } = useGetReports({
@@ -856,6 +893,8 @@ export default function Dashboard() {
       window.location.href = `${BASE}/api/login`;
     }
   }, [reportsError]);
+
+  useEffect(() => { setSelectedMonth(""); }, [selectedFY]);
 
   const [liveReportsData, setLiveReportsData] = useState<ReconciliationResult | null>(null);
 
@@ -915,8 +954,20 @@ export default function Dashboard() {
 
   const displayName = user?.firstName || user?.email?.split("@")[0] || "User";
   const rawReportsData = liveReportsData ?? reportsData;
-  const displayReportsData = rawReportsData ? filterResultByFY(rawReportsData, selectedFY) : null;
-  const displayUploadResult = uploadResult ? filterResultByFY(uploadResult, selectedFY) : null;
+  const fyReportsData = rawReportsData ? filterResultByFY(rawReportsData, selectedFY) : null;
+  const fyUploadData = uploadResult ? filterResultByFY(uploadResult, selectedFY) : null;
+
+  const availableMonths = [
+    ...new Set([
+      ...(fyReportsData?.salesRows.map((r) => monthKey(r.saleDate)) ?? []),
+      ...(fyReportsData?.purchaseRows.map((r) => monthKey(r.billDate)) ?? []),
+      ...(fyUploadData?.salesRows.map((r) => monthKey(r.saleDate)) ?? []),
+      ...(fyUploadData?.purchaseRows.map((r) => monthKey(r.billDate)) ?? []),
+    ]),
+  ].filter(Boolean).sort();
+
+  const displayReportsData = fyReportsData ? filterResultByMonth(fyReportsData, selectedMonth) : null;
+  const displayUploadResult = fyUploadData ? filterResultByMonth(fyUploadData, selectedMonth) : null;
 
   return (
     <div className="min-h-screen pb-20">
@@ -950,6 +1001,21 @@ export default function Dashboard() {
               </select>
               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 pointer-events-none" />
             </div>
+            {availableMonths.length > 0 && (
+              <div className="relative flex items-center">
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="appearance-none bg-muted/50 hover:bg-muted border border-border text-foreground text-sm font-medium pl-3 pr-8 py-2 rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">All Months</option>
+                  {availableMonths.map((m) => (
+                    <option key={m} value={m}>{monthLabel(m)}</option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 pointer-events-none" />
+              </div>
+            )}
             <button
               onClick={appMode === "reports" ? () => setAppMode("upload") : handleSwitchToReports}
               className={cn("flex items-center space-x-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors",
