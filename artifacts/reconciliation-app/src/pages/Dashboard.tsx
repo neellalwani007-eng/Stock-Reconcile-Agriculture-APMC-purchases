@@ -612,12 +612,14 @@ function ResultsView({
             </button>
           </div>
         </div>
-        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[
             { id: "updated-sales", label: "Updated Sales", desc: "With Bill Dates", filename: `updated_sales_${selectedFY}.xlsx` },
             { id: "pending-pavati", label: "Pending Pavati", desc: "Farmers awaiting payment", filename: `pending_pavati_${selectedFY}.xlsx` },
             { id: "datewise-report", label: "Date-wise Report", desc: "Grouped by sale date", filename: `datewise_report_${selectedFY}.xlsx` },
             { id: "purchase-exceptions", label: "Purchase Exceptions", desc: "Unmatched/Extra entries", filename: `purchase_exceptions_${selectedFY}.xlsx` },
+            { id: "monthly-matrix-qty", label: "Monthly Matrix (Qty)", desc: "Sale×Bill date matrix — Quintals", filename: `monthly_matrix_qty_${selectedFY}.xlsx` },
+            { id: "monthly-matrix-amount", label: "Monthly Matrix (Amount)", desc: "Sale×Bill date matrix — ₹ Amount", filename: `monthly_matrix_amount_${selectedFY}.xlsx` },
           ].map((btn) => (
             <button key={btn.id} onClick={() => handleDownload(btn.id, btn.filename, selectedFY)} disabled={downloading !== null}
               className="flex flex-col items-center justify-center p-4 border border-border rounded-xl hover:border-primary hover:bg-primary/5 transition-all text-center group">

@@ -317,3 +317,228 @@ export function buildPurchaseExceptionsExcel(result: ReconciliationResult): Buff
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Purchase Exceptions");
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
 }
+
+function fmtDate(d: string): string {
+  if (!d) return "";
+  const [y, m, day] = d.split("-");
+  return `${day}/${m}/${y}`;
+}
+
+function monthOf(d: string): string { return d ? d.slice(0, 7) : ""; }
+
+function sortedUniq(arr: string[]): string[] {
+  return [...new Set(arr)].sort();
+}
+
+/**
+ * Build the monthly matrix workbook (Qty or Amount).
+ *
+ * Sheet per month+commodity.
+ * Row A = sale dates of this month + carry-forward pending sale dates from prior months (as extra rows at top).
+ * Col 1 = bill dates of this month (matching column).
+ * Cell = sum of matched qty/amount for that saleDate × billDate pair.
+ * Extra cols: Total | Op Pay | Bill Qty | Pending Pay
+ */
+export function buildMonthlyMatrixExcel(
+  result: ReconciliationResult,
+  mode: "qty" | "amount",
+  fy: string,
+): Buffer {
+  const wb = XLSX.utils.book_new();
+
+  // Filter to FY
+  function getFY(dateStr: string): string {
+    const d = new Date(dateStr);
+    const mo = d.getMonth() + 1;
+    const yr = d.getFullYear();
+    return mo >= 4 ? `${yr}-${String(yr + 1).slice(-2)}` : `${yr - 1}-${String(yr).slice(-2)}`;
+  }
+  const sales = result.salesRows.filter((r) => getFY(r.saleDate) === fy);
+  const purchases = result.purchaseRows.filter((r) => getFY(r.billDate) === fy);
+
+  // All commodities
+  const items = sortedUniq([
+    ...sales.map((r) => r.item),
+    ...purchases.map((r) => r.item),
+  ]);
+
+  // All months in FY (Apr..Mar)
+  const allMonths = sortedUniq([
+    ...sales.map((r) => monthOf(r.saleDate)),
+    ...purchases.map((r) => monthOf(r.billDate)),
+  ]);
+
+  // month label helper
+  const MNAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function monthLabel(ym: string): string {
+    const [y, m] = ym.split("-");
+    return `${MNAMES[parseInt(m) - 1]} ${y}`;
+  }
+
+  for (const item of items) {
+    const itemSales = sales.filter((r) => r.item === item);
+    const itemPurchases = purchases.filter((r) => r.item === item);
+
+    // Build a lookup: saleId -> sale
+    // Build match pairs: each matched sale knows its billDate and saleDate
+    // We need: for each (saleDate, billDate) -> sum of qty/amount
+
+    type CellKey = string; // `${saleDate}|${billDate}`
+    const cellMap = new Map<CellKey, number>();
+    for (const s of itemSales) {
+      if (s.status === "Matched" && s.purchaseBillDate) {
+        const key: CellKey = `${s.saleDate}|${s.purchaseBillDate}`;
+        cellMap.set(key, (cellMap.get(key) ?? 0) + (mode === "qty" ? s.qty : s.amount));
+      }
+    }
+
+    for (const monthKey of allMonths) {
+      // Bill dates (purchase bill dates) in this month
+      const billDates = sortedUniq(
+        itemPurchases
+          .filter((r) => monthOf(r.billDate) === monthKey)
+          .map((r) => r.billDate),
+      );
+
+      // Sale dates in this month
+      const thisMonthSaleDates = sortedUniq(
+        itemSales
+          .filter((r) => monthOf(r.saleDate) === monthKey)
+          .map((r) => r.saleDate),
+      );
+
+      // Carry-forward rows: pending sales from PRIOR months
+      const priorMonths = allMonths.filter((m) => m < monthKey);
+      const carryForwardRows: { label: string; saleDate: string }[] = [];
+      for (const pm of priorMonths) {
+        const pmSales = sortedUniq(
+          itemSales
+            .filter((r) => monthOf(r.saleDate) === pm && r.status === "Pending")
+            .map((r) => r.saleDate),
+        );
+        for (const sd of pmSales) {
+          // Check if any quantity from this saleDate is pending at start of this month
+          const pendingQty = itemSales
+            .filter((r) => r.saleDate === sd && r.status === "Pending")
+            .reduce((a, r) => a + (mode === "qty" ? r.qty : r.amount), 0);
+          if (pendingQty > 0) {
+            carryForwardRows.push({ label: fmtDate(sd), saleDate: sd });
+          }
+        }
+      }
+
+      // All row sale dates = carryforward + this month's sale dates
+      const rowSaleDates: { label: string; saleDate: string }[] = [
+        ...carryForwardRows,
+        ...thisMonthSaleDates.map((sd) => ({ label: fmtDate(sd), saleDate: sd })),
+      ];
+
+      if (rowSaleDates.length === 0 && billDates.length === 0) continue;
+
+      // Build the AOA (array of arrays)
+      // Row 0: header row — "Date" | bill dates (formatted) | "Total" | "Op Pay" | "Bill Qty" | "Pending Pay"
+      const header: (string | number)[] = [
+        "Date",
+        ...billDates.map(fmtDate),
+        "Total",
+        "Op Pay",
+        "Bill Qty",
+        "Pending Pay",
+      ];
+      const aoa: (string | number)[][] = [header];
+
+      // Column totals accumulators
+      const colTotals: number[] = new Array(billDates.length).fill(0);
+      let grandTotal = 0;
+      let totalBillQty = 0;
+
+      // Op Pay total = sum of carryForward pending values
+      let opPayTotal = 0;
+      // Pending Pay total = sum of all pending sale rows (carryforward + this month)
+      let pendingPayTotal = 0;
+
+      for (const { label, saleDate } of rowSaleDates) {
+        const isCarryForward = carryForwardRows.some((r) => r.saleDate === saleDate);
+
+        // Bill Qty = total sales qty/amount for this saleDate
+        const billQty = itemSales
+          .filter((r) => r.saleDate === saleDate)
+          .reduce((a, r) => a + (mode === "qty" ? r.qty : r.amount), 0);
+
+        // Op Pay (only for carry-forward rows) = pending from prior months
+        const opPay = isCarryForward
+          ? itemSales
+              .filter((r) => r.saleDate === saleDate && r.status === "Pending")
+              .reduce((a, r) => a + (mode === "qty" ? r.qty : r.amount), 0)
+          : 0;
+
+        // Matched values per bill date
+        const rowValues: number[] = billDates.map((bd) => {
+          const key: CellKey = `${saleDate}|${bd}`;
+          return cellMap.get(key) ?? 0;
+        });
+
+        const rowTotal = rowValues.reduce((a, v) => a + v, 0);
+
+        // Pending Pay = billQty - rowTotal - opPay (what's still unmatched after this month's payments)
+        const pendingPay = Math.max(0, billQty - rowTotal - (isCarryForward ? opPay : 0));
+
+        // For carry-forward rows, op pay is the pending from prior months
+        // (already matched in this month's bill dates means those were cleared)
+        const effectiveOpPay = isCarryForward ? opPay : 0;
+
+        const row: (string | number)[] = [
+          label,
+          ...rowValues.map((v) => (v > 0 ? v : "")),
+          rowTotal > 0 ? rowTotal : "",
+          effectiveOpPay > 0 ? effectiveOpPay : "",
+          billQty > 0 ? billQty : "",
+          pendingPay > 0 ? pendingPay : "",
+        ];
+        aoa.push(row);
+
+        rowValues.forEach((v, i) => { colTotals[i] += v; });
+        grandTotal += rowTotal;
+        totalBillQty += billQty;
+        opPayTotal += effectiveOpPay;
+        pendingPayTotal += pendingPay;
+      }
+
+      // Total row
+      const totalRow: (string | number)[] = [
+        "Total",
+        ...colTotals.map((v) => (v > 0 ? v : "")),
+        grandTotal > 0 ? grandTotal : "",
+        opPayTotal > 0 ? opPayTotal : "",
+        totalBillQty > 0 ? totalBillQty : "",
+        pendingPayTotal > 0 ? pendingPayTotal : "",
+      ];
+      aoa.push(totalRow);
+
+      const sheetName = `${monthLabel(monthKey)} - ${item}`.slice(0, 31);
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+      // Style: bold header row and total row
+      const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
+      // Set column widths
+      ws["!cols"] = [{ wch: 14 }, ...billDates.map(() => ({ wch: 12 })), { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
+
+      // Bold header and totals
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const hCell = XLSX.utils.encode_cell({ r: 0, c: C });
+        const tCell = XLSX.utils.encode_cell({ r: aoa.length - 1, c: C });
+        if (ws[hCell]) ws[hCell].s = { font: { bold: true }, fill: { fgColor: { rgb: "1A4731" } }, fontColor: { rgb: "FFFFFF" } };
+        if (ws[tCell]) ws[tCell].s = { font: { bold: true }, fill: { fgColor: { rgb: "D9EAD3" } } };
+      }
+
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    }
+  }
+
+  if (wb.SheetNames.length === 0) {
+    const ws = XLSX.utils.aoa_to_sheet([["No data available for the selected FY"]]);
+    XLSX.utils.book_append_sheet(wb, ws, "No Data");
+  }
+
+  return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+}

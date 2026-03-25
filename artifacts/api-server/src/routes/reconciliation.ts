@@ -9,6 +9,7 @@ import {
   buildPendingPavatiExcel,
   buildDatewiseReportExcel,
   buildPurchaseExceptionsExcel,
+  buildMonthlyMatrixExcel,
   type SaleRow,
   type PurchaseRow,
   type ReconciliationResult,
@@ -552,6 +553,14 @@ router.post("/download/:fileType", async (req: Request, res: Response) => {
       case "purchase-exceptions":
         buffer = buildPurchaseExceptionsExcel(result);
         filename = "purchase_exceptions.xlsx";
+        break;
+      case "monthly-matrix-qty":
+        buffer = buildMonthlyMatrixExcel(result, "qty", fy ?? "");
+        filename = `monthly_matrix_qty_${fy ?? "all"}.xlsx`;
+        break;
+      case "monthly-matrix-amount":
+        buffer = buildMonthlyMatrixExcel(result, "amount", fy ?? "");
+        filename = `monthly_matrix_amount_${fy ?? "all"}.xlsx`;
         break;
       default:
         res.status(400).json({ error: `Unknown fileType: ${fileType}` });
