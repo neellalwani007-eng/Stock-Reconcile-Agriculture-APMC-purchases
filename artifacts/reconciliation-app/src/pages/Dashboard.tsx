@@ -525,6 +525,12 @@ function ResultsView({
   const [showAddSale, setShowAddSale] = useState(false);
   const [showAddPurchase, setShowAddPurchase] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const [sf, setSf] = useState({ saleDate: "", item: "", qty: "", rate: "", amount: "", billDate: "", status: "" });
+  const [pf, setPf] = useState({ billDate: "", purchaseDate: "", item: "", qty: "", rate: "", amount: "", status: "" });
+
+  const matchF = (val: string | number, f: string) =>
+    f.trim() === "" || String(val).toLowerCase().includes(f.toLowerCase().trim());
   const { handleDownload, downloading } = useReconciliationDownloads();
 
   const salesDates = [...new Set(data.salesRows.map((r) => r.saleDate))].sort();
@@ -661,10 +667,33 @@ function ResultsView({
                   <th className="px-4 py-4 font-semibold text-center">Status</th>
                   <th className="px-4 py-4 font-semibold text-center">Action</th>
                 </tr>
+                <tr className="bg-muted/30">
+                  {(["saleDate","item","qty","rate","amount","billDate","status"] as const).map((col) => (
+                    <th key={col} className="px-2 py-1.5 font-normal">
+                      <input
+                        type="text"
+                        placeholder="Search…"
+                        value={sf[col]}
+                        onChange={(e) => setSf((p) => ({ ...p, [col]: e.target.value }))}
+                        className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </th>
+                  ))}
+                  <th className="px-2 py-1.5" />
+                </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {data.salesRows
                   .filter((r) => (activeTab === "pending" ? r.status === "Pending" : true))
+                  .filter((r) =>
+                    matchF(formatDate(r.saleDate), sf.saleDate) &&
+                    matchF(r.item, sf.item) &&
+                    matchF(r.qty.toFixed(2), sf.qty) &&
+                    matchF(r.rate, sf.rate) &&
+                    matchF(r.amount, sf.amount) &&
+                    matchF(r.purchaseBillDate ? formatDate(r.purchaseBillDate) : "", sf.billDate) &&
+                    matchF(r.status, sf.status)
+                  )
                   .map((row) => (
                     <tr key={row.id} className="hover:bg-muted/30">
                       <td className="px-4 py-3 whitespace-nowrap">{formatDate(row.saleDate)}</td>
@@ -688,7 +717,17 @@ function ResultsView({
                       </td>
                     </tr>
                   ))}
-                {data.salesRows.filter((r) => activeTab === "pending" ? r.status === "Pending" : true).length === 0 && (
+                {data.salesRows
+                  .filter((r) => (activeTab === "pending" ? r.status === "Pending" : true))
+                  .filter((r) =>
+                    matchF(formatDate(r.saleDate), sf.saleDate) &&
+                    matchF(r.item, sf.item) &&
+                    matchF(r.qty.toFixed(2), sf.qty) &&
+                    matchF(r.rate, sf.rate) &&
+                    matchF(r.amount, sf.amount) &&
+                    matchF(r.purchaseBillDate ? formatDate(r.purchaseBillDate) : "", sf.billDate) &&
+                    matchF(r.status, sf.status)
+                  ).length === 0 && (
                   <tr><td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">No records found</td></tr>
                 )}
               </tbody>
@@ -708,10 +747,33 @@ function ResultsView({
                   <th className="px-4 py-4 font-semibold text-center">Status</th>
                   <th className="px-4 py-4 font-semibold text-center">Action</th>
                 </tr>
+                <tr className="bg-muted/30">
+                  {(["billDate","purchaseDate","item","qty","rate","amount","status"] as const).map((col) => (
+                    <th key={col} className="px-2 py-1.5 font-normal">
+                      <input
+                        type="text"
+                        placeholder="Search…"
+                        value={pf[col]}
+                        onChange={(e) => setPf((p) => ({ ...p, [col]: e.target.value }))}
+                        className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </th>
+                  ))}
+                  <th className="px-2 py-1.5" />
+                </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {data.purchaseRows
                   .filter((r) => r.status !== "Matched")
+                  .filter((r) =>
+                    matchF(formatDate(r.billDate), pf.billDate) &&
+                    matchF(formatDate(r.purchaseDate), pf.purchaseDate) &&
+                    matchF(r.item, pf.item) &&
+                    matchF(r.qty.toFixed(2), pf.qty) &&
+                    matchF(r.rate, pf.rate) &&
+                    matchF(r.amount, pf.amount) &&
+                    matchF(r.status, pf.status)
+                  )
                   .map((row) => (
                     <tr key={row.id} className="hover:bg-muted/30">
                       <td className="px-4 py-3 whitespace-nowrap">{formatDate(row.billDate)}</td>
@@ -733,7 +795,17 @@ function ResultsView({
                       </td>
                     </tr>
                   ))}
-                {data.purchaseRows.filter((r) => r.status !== "Matched").length === 0 && (
+                {data.purchaseRows
+                  .filter((r) => r.status !== "Matched")
+                  .filter((r) =>
+                    matchF(formatDate(r.billDate), pf.billDate) &&
+                    matchF(formatDate(r.purchaseDate), pf.purchaseDate) &&
+                    matchF(r.item, pf.item) &&
+                    matchF(r.qty.toFixed(2), pf.qty) &&
+                    matchF(r.rate, pf.rate) &&
+                    matchF(r.amount, pf.amount) &&
+                    matchF(r.status, pf.status)
+                  ).length === 0 && (
                   <tr><td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">All purchase records matched</td></tr>
                 )}
               </tbody>
