@@ -189,8 +189,13 @@ router.post(
         }
 
         if (allSaleRows.length > 0) {
-          const datesInFile = new Set(allSaleRows.map((r) => r.saleDate));
-          data.sales = data.sales.filter((s) => !datesInFile.has(s.saleDate));
+          // Dedup by date + item — so uploading Corn on 04/05 does NOT delete Onion on 04/05
+          const dateItemsInFile = new Set(
+            allSaleRows.map((r) => `${r.saleDate}|${r.item.trim().toLowerCase()}`)
+          );
+          data.sales = data.sales.filter(
+            (s) => !dateItemsInFile.has(`${s.saleDate}|${s.item.trim().toLowerCase()}`)
+          );
           for (const r of allSaleRows) {
             data.sales.push({
               id: data.nextSaleId++,
@@ -236,8 +241,13 @@ router.post(
         }
 
         if (allPurchaseRows.length > 0) {
-          const datesInFile = new Set(allPurchaseRows.map((r) => r.billDate));
-          data.purchases = data.purchases.filter((p) => !datesInFile.has(p.billDate));
+          // Dedup by bill date + item — so uploading Corn on 04/05 does NOT delete Onion on 04/05
+          const dateItemsInFile = new Set(
+            allPurchaseRows.map((r) => `${r.billDate}|${r.item.trim().toLowerCase()}`)
+          );
+          data.purchases = data.purchases.filter(
+            (p) => !dateItemsInFile.has(`${p.billDate}|${p.item.trim().toLowerCase()}`)
+          );
           for (const r of allPurchaseRows) {
             data.purchases.push({
               id: data.nextPurchaseId++,
