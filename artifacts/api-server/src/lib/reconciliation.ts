@@ -91,7 +91,8 @@ function normalizeNum(val: unknown): number {
 
 function normalizeStr(val: unknown): string {
   if (val === null || val === undefined) return "";
-  return String(val).trim().toLowerCase();
+  // normalize("NFC") ensures Marathi / Devanagari Unicode forms compare correctly
+  return String(val).normalize("NFC").trim().toLowerCase();
 }
 
 function toTitleCase(str: string): string {
@@ -117,7 +118,8 @@ function findCol(hm: Record<string, number>, ...candidates: string[]): number {
 
 function optStr(r: unknown[], col: number): string | undefined {
   if (col === -1 || r[col] == null || String(r[col]).trim() === "") return undefined;
-  return String(r[col]).trim();
+  // NFC normalization preserves Marathi / Devanagari characters correctly
+  return String(r[col]).normalize("NFC").trim();
 }
 
 export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
@@ -357,6 +359,14 @@ export function buildMonthlyMatrixExcel(
 ): Buffer {
   const wb = XLSX.utils.book_new();
 
+  // Round to 2 decimal places to eliminate floating-point noise
+  const r2 = (v: number): number => Math.round(v * 100) / 100;
+  // Write a value to a cell — blank string when zero (after rounding)
+  const cellVal = (v: number): number | "" => {
+    const rounded = r2(v);
+    return rounded !== 0 ? rounded : "";
+  };
+
   function getFY(dateStr: string): string {
     const d = new Date(dateStr);
     const mo = d.getMonth() + 1;
@@ -366,10 +376,13 @@ export function buildMonthlyMatrixExcel(
   const sales = result.salesRows.filter((r) => getFY(r.saleDate) === fy);
   const purchases = result.purchaseRows.filter((r) => getFY(r.billDate) === fy);
 
-  const items = sortedUniq([
-    ...sales.map((r) => r.item),
-    ...purchases.map((r) => r.item),
-  ]);
+  // Group items by normalised key so different casings / Unicode forms merge correctly
+  const itemNormMap = new Map<string, string>(); // normKey → display name
+  for (const r of [...sales, ...purchases]) {
+    const key = r.item.trim().toLowerCase();
+    if (!itemNormMap.has(key)) itemNormMap.set(key, r.item.trim());
+  }
+  const itemKeys = [...itemNormMap.keys()].sort();
 
   const allMonths = sortedUniq([
     ...sales.map((r) => monthOf(r.saleDate)),
@@ -382,16 +395,18 @@ export function buildMonthlyMatrixExcel(
     return `${MNAMES[parseInt(m) - 1]} ${y}`;
   }
 
-  for (const item of items) {
-    const itemSales = sales.filter((r) => r.item === item);
-    const itemPurchases = purchases.filter((r) => r.item === item);
+  for (const itemKey of itemKeys) {
+    const displayItem = itemNormMap.get(itemKey)!;
+    const itemSales = sales.filter((r) => r.item.trim().toLowerCase() === itemKey);
+    const itemPurchases = purchases.filter((r) => r.item.trim().toLowerCase() === itemKey);
 
     type CellKey = string;
     const cellMap = new Map<CellKey, number>();
     for (const s of itemSales) {
       if (s.status === "Matched" && s.purchaseBillDate) {
         const key: CellKey = `${s.saleDate}|${s.purchaseBillDate}`;
-        cellMap.set(key, (cellMap.get(key) ?? 0) + (mode === "qty" ? s.qty : s.amount));
+        // Round each accumulation to prevent floating-point creep
+        cellMap.set(key, r2((cellMap.get(key) ?? 0) + (mode === "qty" ? s.qty : s.amount)));
       }
     }
 
@@ -415,13 +430,13 @@ export function buildMonthlyMatrixExcel(
         const val = mode === "qty" ? s.qty : s.amount;
 
         if (s.status === "Pending") {
-          cfMap.set(s.saleDate, (cfMap.get(s.saleDate) ?? 0) + val);
+          cfMap.set(s.saleDate, r2((cfMap.get(s.saleDate) ?? 0) + val));
         } else if (
           s.status === "Matched" &&
           s.purchaseBillDate &&
           monthOf(s.purchaseBillDate) === monthKey
         ) {
-          cfMap.set(s.saleDate, (cfMap.get(s.saleDate) ?? 0) + val);
+          cfMap.set(s.saleDate, r2((cfMap.get(s.saleDate) ?? 0) + val));
         }
       }
 
@@ -462,55 +477,58 @@ export function buildMonthlyMatrixExcel(
       for (const { label, saleDate, opPay } of rowSaleDates) {
         const isCarryForward = cfSdSet.has(saleDate);
 
+        // Round reduce result immediately to kill accumulated FP error
         const billQty = isCarryForward
           ? opPay
-          : itemSales
+          : r2(itemSales
               .filter((r) => r.saleDate === saleDate)
-              .reduce((a, r) => a + (mode === "qty" ? r.qty : r.amount), 0);
+              .reduce((a, r) => a + (mode === "qty" ? r.qty : r.amount), 0));
 
         const rowValues: number[] = billDates.map((bd) => {
           const key: CellKey = `${saleDate}|${bd}`;
           return cellMap.get(key) ?? 0;
         });
 
-        const rowTotal = rowValues.reduce((a, v) => a + v, 0);
+        // Round rowTotal to kill FP noise from multi-value reduce
+        const rowTotal = r2(rowValues.reduce((a, v) => a + v, 0));
 
-        const pendingPay = isCarryForward
-          ? Math.max(0, opPay - rowTotal)
-          : Math.max(0, billQty - rowTotal);
+        // pendingPay should never be negative; round to eliminate -2.22e-16 style noise
+        const pendingPay = r2(Math.max(0, r2(billQty - rowTotal)));
 
         const row: (string | number)[] = [
           label,
-          ...rowValues.map((v) => (v > 0 ? v : "")),
-          rowTotal > 0 ? rowTotal : "",
-          opPay > 0 ? opPay : "",
-          billQty > 0 ? billQty : "",
-          pendingPay > 0 ? pendingPay : "",
+          ...rowValues.map(cellVal),
+          cellVal(rowTotal),
+          cellVal(opPay),
+          cellVal(billQty),
+          cellVal(pendingPay),
         ];
         aoa.push(row);
 
-        rowValues.forEach((v, i) => { colTotals[i] += v; });
-        grandTotal += rowTotal;
-        totalBillQty += billQty;
-        opPayTotal += opPay;
-        pendingPayTotal += pendingPay;
+        // Round each column total accumulation
+        rowValues.forEach((v, i) => { colTotals[i] = r2(colTotals[i] + v); });
+        grandTotal       = r2(grandTotal + rowTotal);
+        totalBillQty     = r2(totalBillQty + billQty);
+        opPayTotal       = r2(opPayTotal + opPay);
+        pendingPayTotal  = r2(pendingPayTotal + pendingPay);
       }
 
       const totalRow: (string | number)[] = [
         "Total",
-        ...colTotals.map((v) => (v > 0 ? v : "")),
-        grandTotal > 0 ? grandTotal : "",
-        opPayTotal > 0 ? opPayTotal : "",
-        totalBillQty > 0 ? totalBillQty : "",
-        pendingPayTotal > 0 ? pendingPayTotal : "",
+        ...colTotals.map(cellVal),
+        cellVal(grandTotal),
+        cellVal(opPayTotal),
+        cellVal(totalBillQty),
+        cellVal(pendingPayTotal),
       ];
       aoa.push(totalRow);
 
-      const sheetName = `${monthLabel(monthKey)} - ${item}`.slice(0, 31);
+      // Build sheet name — use displayItem so Marathi/Unicode names appear correctly
+      const sheetName = `${monthLabel(monthKey)} - ${displayItem}`.slice(0, 31);
       const ws = XLSX.utils.aoa_to_sheet(aoa);
 
       const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
-      ws["!cols"] = [{ wch: 14 }, ...billDates.map(() => ({ wch: 12 })), { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
+      ws["!cols"] = [{ wch: 16 }, ...billDates.map(() => ({ wch: 12 })), { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
 
       for (let C = range.s.c; C <= range.e.c; C++) {
         const hCell = XLSX.utils.encode_cell({ r: 0, c: C });
