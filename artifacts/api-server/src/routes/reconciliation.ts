@@ -56,6 +56,9 @@ function drSaleToRow(r: DrSaleRecord): SaleRow {
     amount: parseFloat(r.amount),
     purchaseBillDate: r.purchaseBillDate,
     status: r.status,
+    kpNo: r.kpNo,
+    farmerName: r.farmerName,
+    village: r.village,
   };
 }
 
@@ -159,7 +162,6 @@ router.post(
       const fileResults: FileImportResult[] = [];
       const data = await getDataFromDrive(authedReq);
 
-      // Parse sale files individually — track per-file results
       if (files["salesFile"]) {
         const allSaleRows: ReturnType<typeof parseSalesSheet> = [];
         for (const f of files["salesFile"]) {
@@ -189,7 +191,6 @@ router.post(
         }
 
         if (allSaleRows.length > 0) {
-          // Dedup by date + item — so uploading Corn on 04/05 does NOT delete Onion on 04/05
           const dateItemsInFile = new Set(
             allSaleRows.map((r) => `${r.saleDate}|${r.item.trim().toLowerCase()}`)
           );
@@ -204,6 +205,9 @@ router.post(
               qty: String(r.qty),
               rate: String(r.rate),
               amount: String(r.amount),
+              kpNo: r.kpNo,
+              farmerName: r.farmerName,
+              village: r.village,
               status: "Pending",
               purchaseBillDate: null,
             });
@@ -211,7 +215,6 @@ router.post(
         }
       }
 
-      // Parse purchase files individually — track per-file results
       if (files["purchaseFile"]) {
         const allPurchaseRows: ReturnType<typeof parsePurchaseSheet> = [];
         for (const f of files["purchaseFile"]) {
@@ -241,7 +244,6 @@ router.post(
         }
 
         if (allPurchaseRows.length > 0) {
-          // Dedup by bill date + item — so uploading Corn on 04/05 does NOT delete Onion on 04/05
           const dateItemsInFile = new Set(
             allPurchaseRows.map((r) => `${r.billDate}|${r.item.trim().toLowerCase()}`)
           );
@@ -289,17 +291,90 @@ router.get("/reports", async (req: Request, res: Response) => {
   }
 });
 
+// ── GET /reconciliation/notes ─────────────────────────────────────────────────
+router.get("/notes", async (req: Request, res: Response) => {
+  if (!req.isAuthenticated()) { res.json({ notes: {} }); return; }
+  const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
+  try {
+    const data = await getDataFromDrive(authedReq);
+    res.json({ notes: data.notes ?? {} });
+  } catch (err) {
+    handleDriveError(err, res, "Failed to load notes.");
+  }
+});
+
+// ── GET /reconciliation/settings ──────────────────────────────────────────────
+router.get("/settings", async (req: Request, res: Response) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
+  const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
+  try {
+    const data = await getDataFromDrive(authedReq);
+    res.json({ hasCustomPassword: !!data.deletePassword });
+  } catch (err) {
+    handleDriveError(err, res, "Failed to load settings.");
+  }
+});
+
+// ── PUT /reconciliation/settings/delete-password — change delete password ─────
+router.put("/settings/delete-password", async (req: Request, res: Response) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
+  const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
+  const { oldPassword, newPassword } = req.body as { oldPassword?: string; newPassword?: string };
+  if (!oldPassword || !newPassword) {
+    res.status(400).json({ error: "Provide oldPassword and newPassword." }); return;
+  }
+  if (newPassword.trim().length < 3) {
+    res.status(400).json({ error: "New password must be at least 3 characters." }); return;
+  }
+  try {
+    const data = await getDataFromDrive(authedReq);
+    const storedPassword = data.deletePassword ?? "confirm";
+    if (oldPassword !== storedPassword) {
+      res.status(403).json({ error: "Incorrect current password." }); return;
+    }
+    data.deletePassword = newPassword.trim();
+    await saveDataToDrive(authedReq, data);
+    res.json({ ok: true });
+  } catch (err) {
+    handleDriveError(err, res, "Failed to change password.");
+  }
+});
+
+// ── POST /reconciliation/settings/reset-delete-password — forgot password ─────
+router.post("/settings/reset-delete-password", async (req: Request, res: Response) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
+  const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
+  try {
+    const data = await getDataFromDrive(authedReq);
+    delete data.deletePassword;
+    await saveDataToDrive(authedReq, data);
+    res.json({ ok: true });
+  } catch (err) {
+    handleDriveError(err, res, "Failed to reset password.");
+  }
+});
+
 // ── POST /reconciliation/records/sale — add sale record ─────────────────────
 router.post("/records/sale", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
   const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
-  const { saleDate, item, qty, rate, amount } = req.body as { saleDate: string; item: string; qty: number; rate: number; amount: number };
+  const { saleDate, item, qty, rate, amount, kpNo, farmerName, village } = req.body as {
+    saleDate: string; item: string; qty: number; rate: number; amount: number;
+    kpNo?: string; farmerName?: string; village?: string;
+  };
   if (!saleDate || !item || !qty || !rate || !amount) {
     res.status(400).json({ error: "All fields required: saleDate, item, qty, rate, amount" }); return;
   }
   try {
     const data = await getDataFromDrive(authedReq);
-    data.sales.push({ id: data.nextSaleId++, saleDate, item: String(item).trim(), qty: String(qty), rate: String(rate), amount: String(amount), status: "Pending", purchaseBillDate: null });
+    data.sales.push({
+      id: data.nextSaleId++, saleDate, item: String(item).trim(),
+      qty: String(qty), rate: String(rate), amount: String(amount),
+      kpNo: kpNo?.trim() || undefined,
+      farmerName: farmerName?.trim() || undefined,
+      village: village?.trim() || undefined,
+      status: "Pending", purchaseBillDate: null,
+    });
     await saveDataToDrive(authedReq, data);
     res.json(await runMatchingForUser(authedReq));
   } catch (err) {
@@ -312,9 +387,12 @@ router.post("/records/sale", async (req: Request, res: Response) => {
 router.put("/records/sale/:id", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
   const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id." }); return; }
-  const { saleDate, item, qty, rate, amount } = req.body as { saleDate?: string; item?: string; qty?: number; rate?: number; amount?: number };
+  const { saleDate, item, qty, rate, amount, kpNo, farmerName, village } = req.body as {
+    saleDate?: string; item?: string; qty?: number; rate?: number; amount?: number;
+    kpNo?: string; farmerName?: string; village?: string;
+  };
   try {
     const data = await getDataFromDrive(authedReq);
     const rec = data.sales.find((s) => s.id === id);
@@ -324,6 +402,9 @@ router.put("/records/sale/:id", async (req: Request, res: Response) => {
     if (qty !== undefined) rec.qty = String(qty);
     if (rate !== undefined) rec.rate = String(rate);
     if (amount !== undefined) rec.amount = String(amount);
+    if (kpNo !== undefined) rec.kpNo = kpNo.trim() || undefined;
+    if (farmerName !== undefined) rec.farmerName = farmerName.trim() || undefined;
+    if (village !== undefined) rec.village = village.trim() || undefined;
     await saveDataToDrive(authedReq, data);
     res.json(await runMatchingForUser(authedReq));
   } catch (err) {
@@ -355,7 +436,7 @@ router.post("/records/purchase", async (req: Request, res: Response) => {
 router.put("/records/purchase/:id", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
   const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id." }); return; }
   const { billDate, purchaseDate, item, qty, rate, amount } = req.body as { billDate?: string; purchaseDate?: string; item?: string; qty?: number; rate?: number; amount?: number };
   try {
@@ -376,11 +457,35 @@ router.put("/records/purchase/:id", async (req: Request, res: Response) => {
   }
 });
 
+// ── PUT /reconciliation/records/purchase/:id/note — save note ────────────────
+router.put("/records/purchase/:id/note", async (req: Request, res: Response) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
+  const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id." }); return; }
+  const { note } = req.body as { note?: string };
+  try {
+    const data = await getDataFromDrive(authedReq);
+    if (!data.notes) data.notes = {};
+    const key = String(id);
+    if (note && note.trim()) {
+      data.notes[key] = note.trim();
+    } else {
+      delete data.notes[key];
+    }
+    await saveDataToDrive(authedReq, data);
+    res.json({ ok: true, note: data.notes[key] ?? "" });
+  } catch (err) {
+    req.log.error({ err }, "Failed to save note");
+    handleDriveError(err, res, "Failed to save note.");
+  }
+});
+
 // ── DELETE /reconciliation/records/sale/:id ──────────────────────────────────
 router.delete("/records/sale/:id", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
   const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id." }); return; }
   try {
     const data = await getDataFromDrive(authedReq);
@@ -404,7 +509,7 @@ router.delete("/records/sale/:id", async (req: Request, res: Response) => {
 router.delete("/records/purchase/:id", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
   const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id." }); return; }
   try {
     const data = await getDataFromDrive(authedReq);
@@ -449,18 +554,33 @@ router.delete("/records/bulk", async (req: Request, res: Response) => {
   }
 });
 
-// ── DELETE /reconciliation/records/date — delete all records for a date ──────
+// ── DELETE /reconciliation/records/date — delete records for one or more dates ──
 router.delete("/records/date", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
   const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
-  const { date, type } = req.body as { date?: string; type?: "sale" | "purchase" };
-  if (!date || !type || !["sale", "purchase"].includes(type)) {
-    res.status(400).json({ error: "Provide date (YYYY-MM-DD) and type ('sale' or 'purchase')." }); return;
+  const { date, dates, type, password } = req.body as {
+    date?: string;
+    dates?: string[];
+    type?: "sale" | "purchase";
+    password?: string;
+  };
+
+  const datesToDelete: string[] = dates ?? (date ? [date] : []);
+  if (datesToDelete.length === 0 || !type || !["sale", "purchase"].includes(type)) {
+    res.status(400).json({ error: "Provide dates (array) and type ('sale' or 'purchase')." }); return;
   }
   try {
     const data = await getDataFromDrive(authedReq);
-    if (type === "sale") data.sales = data.sales.filter((s) => s.saleDate !== date);
-    else data.purchases = data.purchases.filter((p) => p.billDate !== date);
+    const storedPassword = data.deletePassword ?? "confirm";
+    if (password !== storedPassword) {
+      res.status(403).json({ error: "Incorrect password." }); return;
+    }
+    const dateSet = new Set(datesToDelete);
+    if (type === "sale") {
+      data.sales = data.sales.filter((s) => !dateSet.has(s.saleDate));
+    } else {
+      data.purchases = data.purchases.filter((p) => !dateSet.has(p.billDate));
+    }
     await saveDataToDrive(authedReq, data);
     res.json(await runMatchingForUser(authedReq));
   } catch (err) {
@@ -488,7 +608,6 @@ router.post("/why-unmatched", async (req: Request, res: Response) => {
         res.json({ globalReason: "No unmatched purchase records exist in the system.", candidates: [] }); return;
       }
 
-      // Find purchases for same item
       const sameItem = unmatched.filter((p) => p.item.trim().toLowerCase() === sale.item.trim().toLowerCase());
       const pool = sameItem.length > 0 ? sameItem : unmatched;
 
@@ -559,7 +678,6 @@ router.post("/manual-match", async (req: Request, res: Response) => {
     if (!sale) { res.status(404).json({ error: "Sale record not found." }); return; }
     if (!purchase) { res.status(404).json({ error: "Purchase record not found." }); return; }
 
-    // Apply corrections to sale record
     if (saleCorrections) {
       if (saleCorrections.saleDate !== undefined) sale.saleDate = saleCorrections.saleDate;
       if (saleCorrections.item !== undefined) sale.item = saleCorrections.item.trim();
@@ -568,7 +686,6 @@ router.post("/manual-match", async (req: Request, res: Response) => {
       if (saleCorrections.amount !== undefined) sale.amount = saleCorrections.amount;
     }
 
-    // Apply corrections to purchase record
     if (purchaseCorrections) {
       if (purchaseCorrections.billDate !== undefined) purchase.billDate = purchaseCorrections.billDate;
       if (purchaseCorrections.purchaseDate !== undefined) purchase.purchaseDate = purchaseCorrections.purchaseDate;
@@ -578,7 +695,6 @@ router.post("/manual-match", async (req: Request, res: Response) => {
       if (purchaseCorrections.amount !== undefined) purchase.amount = purchaseCorrections.amount;
     }
 
-    // Force-link the pair
     sale.status = "Matched";
     sale.purchaseBillDate = purchase.billDate;
     purchase.status = "Matched";
@@ -612,15 +728,16 @@ router.post("/download/:fileType", async (req: Request, res: Response) => {
     const filteredSales = fy ? data.sales.filter((s) => getFYFromDate(s.saleDate) === fy) : data.sales;
     const filteredPurchases = fy ? data.purchases.filter((p) => getFYFromDate(p.billDate) === fy) : data.purchases;
     const result = buildResult(filteredSales.map(drSaleToRow), filteredPurchases.map(drPurchaseToRow));
+    const notes = data.notes ?? {};
 
     let buffer: Buffer;
     let filename: string;
 
     switch (fileType) {
-      case "updated-sales":    buffer = buildUpdatedSalesExcel(result);                       filename = "updated_sales.xlsx";                          break;
-      case "pending-pavati":   buffer = buildPendingPavatiExcel(result);                      filename = "pending_pavati.xlsx";                         break;
-      case "datewise-report":  buffer = buildDatewiseReportExcel(result);                     filename = "datewise_report.xlsx";                        break;
-      case "purchase-exceptions": buffer = buildPurchaseExceptionsExcel(result);              filename = "purchase_exceptions.xlsx";                    break;
+      case "updated-sales":    buffer = buildUpdatedSalesExcel(result);                          filename = "updated_sales.xlsx";                          break;
+      case "pending-pavati":   buffer = buildPendingPavatiExcel(result);                         filename = "pending_pavati.xlsx";                         break;
+      case "datewise-report":  buffer = buildDatewiseReportExcel(result);                        filename = "datewise_report.xlsx";                        break;
+      case "purchase-exceptions": buffer = buildPurchaseExceptionsExcel(result, notes);          filename = "purchase_exceptions.xlsx";                    break;
       case "monthly-matrix-qty":    buffer = buildMonthlyMatrixExcel(result, "qty", fy ?? "");    filename = `monthly_matrix_qty_${fy ?? "all"}.xlsx`;    break;
       case "monthly-matrix-amount": buffer = buildMonthlyMatrixExcel(result, "amount", fy ?? ""); filename = `monthly_matrix_amount_${fy ?? "all"}.xlsx`; break;
       default: res.status(400).json({ error: `Unknown fileType: ${fileType}` }); return;

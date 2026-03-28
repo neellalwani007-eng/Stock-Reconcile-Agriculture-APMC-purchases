@@ -36,6 +36,9 @@ export interface DrSaleRecord {
   qty: string;
   rate: string;
   amount: string;
+  kpNo?: string;
+  farmerName?: string;
+  village?: string;
   status: "Pending" | "Matched";
   purchaseBillDate: string | null;
 }
@@ -57,6 +60,8 @@ export interface DriveUserData {
   nextPurchaseId: number;
   sales: DrSaleRecord[];
   purchases: DrPurchaseRecord[];
+  notes?: Record<string, string>;
+  deletePassword?: string;
 }
 
 const EMPTY_DATA: DriveUserData = {
@@ -147,6 +152,8 @@ export async function readUserData(
       ...parsed,
       nextSaleId: parsed.nextSaleId ?? 1,
       nextPurchaseId: parsed.nextPurchaseId ?? 1,
+      notes: parsed.notes ?? {},
+      deletePassword: parsed.deletePassword,
       sales: (parsed.sales ?? []).map((s) => ({
         ...s,
         item: toTitleCase(s.item ?? ""),

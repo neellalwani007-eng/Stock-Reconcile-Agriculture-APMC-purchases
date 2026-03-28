@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRightLeft, CheckCircle2, AlertCircle, Download, LayoutDashboard, Clock,
   AlertTriangle, Loader2, RefreshCcw, BarChart3, Trash2, X, Upload, FileSpreadsheet,
   Plus, LogOut, User, CalendarX, ChevronDown, Edit2, Link2, HelpCircle, FileX,
-  CheckSquare, Square, TrendingUp, CheckCheck,
+  CheckSquare, Square, TrendingUp, CheckCheck, MessageSquare, Info, Lock, Key,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -95,10 +95,10 @@ function filterResultByFY(result: ReconciliationResult, fy: string): Reconciliat
   return { salesRows: sales, purchaseRows: purchases, matchedCount, pendingCount, unmatchedPurchaseCount, summary };
 }
 
-function filterResultByMonth(result: ReconciliationResult, month: string): ReconciliationResult {
-  if (!month) return result;
-  const sales = result.salesRows.filter((r) => monthKey(r.saleDate) === month);
-  const purchases = result.purchaseRows.filter((r) => monthKey(r.billDate) === month);
+function filterResultByMonths(result: ReconciliationResult, months: string[]): ReconciliationResult {
+  if (!months.length) return result;
+  const sales = result.salesRows.filter((r) => months.includes(monthKey(r.saleDate)));
+  const purchases = result.purchaseRows.filter((r) => months.includes(monthKey(r.billDate)));
   const matchedCount = sales.filter((r) => r.status === "Matched").length;
   const pendingCount = sales.filter((r) => r.status === "Pending").length;
   const unmatchedPurchaseCount = purchases.filter((r) => r.status !== "Matched").length;
@@ -202,35 +202,73 @@ function FileImportBanner({ results, onClose }: { results: FileImportResult[]; o
 }
 
 /* ── Monthly Chart ───────────────────────────────────────────────────────────── */
-function MonthlyChart({ data }: { data: ReconciliationResult }) {
+function MonthlyChart({ data, selectedMonths }: { data: ReconciliationResult; selectedMonths: string[] }) {
+  const [chartMode, setChartMode] = useState<"qty" | "amount">("qty");
+  const isDayWise = selectedMonths.length === 1;
+
   const chartData = useMemo(() => {
-    const map = new Map<string, { month: string; matched: number; pending: number }>();
-    for (const s of data.salesRows) {
-      const mk = monthKey(s.saleDate);
-      if (!mk) continue;
-      const entry = map.get(mk) ?? { month: monthLabel(mk), matched: 0, pending: 0 };
-      if (s.status === "Matched") entry.matched += s.qty;
-      else entry.pending += s.qty;
-      map.set(mk, entry);
+    if (isDayWise) {
+      const map = new Map<string, { label: string; matched: number; pending: number }>();
+      for (const s of data.salesRows) {
+        const day = s.saleDate ? s.saleDate.slice(8, 10) : "";
+        if (!day) continue;
+        const entry = map.get(day) ?? { label: day, matched: 0, pending: 0 };
+        const val = chartMode === "qty" ? s.qty : s.amount;
+        if (s.status === "Matched") entry.matched += val;
+        else entry.pending += val;
+        map.set(day, entry);
+      }
+      return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, v]) => v);
+    } else {
+      const map = new Map<string, { month: string; matched: number; pending: number }>();
+      for (const s of data.salesRows) {
+        const mk = monthKey(s.saleDate);
+        if (!mk) continue;
+        const entry = map.get(mk) ?? { month: monthLabel(mk), matched: 0, pending: 0 };
+        const val = chartMode === "qty" ? s.qty : s.amount;
+        if (s.status === "Matched") entry.matched += val;
+        else entry.pending += val;
+        map.set(mk, entry);
+      }
+      return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, v]) => v);
     }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, v]) => v);
-  }, [data]);
+  }, [data, chartMode, isDayWise]);
 
   if (chartData.length === 0) return null;
 
+  const xKey = isDayWise ? "label" : "month";
+  const xLabel = isDayWise ? `Day (${monthLabel(selectedMonths[0])})` : "";
+
   return (
     <div className="bg-card rounded-2xl border border-border p-6">
-      <div className="flex items-center space-x-2 mb-5">
-        <TrendingUp className="w-5 h-5 text-primary" />
-        <h3 className="font-semibold text-foreground">Monthly Matched vs Pending (Qty)</h3>
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center space-x-2">
+          <TrendingUp className="w-5 h-5 text-primary" />
+          <h3 className="font-semibold text-foreground">
+            {isDayWise ? `Day-wise Summary — ${monthLabel(selectedMonths[0])}` : "Monthly Matched vs Pending"}
+          </h3>
+        </div>
+        <div className="flex rounded-lg overflow-hidden border border-border">
+          {(["qty", "amount"] as const).map((m) => (
+            <button key={m} onClick={() => setChartMode(m)}
+              className={cn("px-3 py-1.5 text-xs font-medium transition-colors",
+                chartMode === m ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground")}>
+              {m === "qty" ? "Qty" : "Amount"}
+            </button>
+          ))}
+        </div>
       </div>
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-          <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={48} />
+          <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            axisLine={false} tickLine={false}
+            label={xLabel ? { value: xLabel, position: "insideBottom", offset: -2, fontSize: 10, fill: "hsl(var(--muted-foreground))" } : undefined} />
+          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={48}
+            tickFormatter={(v) => chartMode === "amount" ? `${(v / 1000).toFixed(0)}k` : String(v)} />
           <Tooltip
             contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }}
             labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
+            formatter={(v: number) => chartMode === "amount" ? [formatCurrency(v), undefined] : [v.toFixed(2), undefined]}
           />
           <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
           <Bar dataKey="matched" name="Matched" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
@@ -241,29 +279,92 @@ function MonthlyChart({ data }: { data: ReconciliationResult }) {
   );
 }
 
+/* ── Multi-Month Dropdown ────────────────────────────────────────────────────── */
+function MultiMonthDropdown({ months, selected, onChange }: {
+  months: string[];
+  selected: string[];
+  onChange: (months: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const label = selected.length === 0
+    ? "All Months"
+    : selected.length === 1
+    ? monthLabel(selected[0])
+    : `${selected.length} months`;
+
+  const toggle = (m: string) => {
+    onChange(selected.includes(m) ? selected.filter((s) => s !== m) : [...selected, m]);
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen((v) => !v)}
+        className="appearance-none bg-muted/50 hover:bg-muted border border-border text-foreground text-sm font-medium pl-3 pr-8 py-2 rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary flex items-center space-x-1">
+        <span>{label}</span>
+        <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground absolute right-2.5 transition-transform", open && "rotate-180")} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+            className="absolute top-full right-0 mt-1 z-50 bg-card border border-border rounded-xl shadow-xl min-w-[170px] overflow-hidden">
+            <div className="p-1.5 max-h-64 overflow-y-auto">
+              <button onClick={() => { onChange([]); setOpen(false); }}
+                className="w-full px-3 py-2 text-sm text-left hover:bg-muted rounded-lg flex items-center justify-between transition-colors">
+                <span className="font-medium">All Months</span>
+                {selected.length === 0 && <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" />}
+              </button>
+              <div className="border-t border-border/50 my-1" />
+              {months.map((m) => (
+                <button key={m} onClick={() => toggle(m)}
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-muted rounded-lg flex items-center justify-between transition-colors">
+                  <span>{monthLabel(m)}</span>
+                  {selected.includes(m)
+                    ? <CheckSquare className="w-3.5 h-3.5 text-primary shrink-0" />
+                    : <Square className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 /* ── Shared form field styles ─────────────────────────────────────────────────── */
 const inputCls = "w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors text-sm";
 
-/* ── Delete by Date Modal ─────────────────────────────────────────────────────── */
-function DeleteByDateModal({ salesDates, purchaseDates, onClose, onSuccess }: {
-  salesDates: string[]; purchaseDates: string[];
-  onClose: () => void; onSuccess: (data: ReconciliationResult) => void;
+/* ── Note Modal ───────────────────────────────────────────────────────────────── */
+function NoteModal({ purchaseId, initialNote, onClose, onSaved }: {
+  purchaseId: number;
+  initialNote: string;
+  onClose: () => void;
+  onSaved: (id: number, note: string) => void;
 }) {
-  const [type, setType] = useState<"sale" | "purchase">("sale");
-  const [date, setDate] = useState("");
+  const [text, setText] = useState(initialNote);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
-  const dates = type === "sale" ? salesDates : purchaseDates;
 
-  const handleDelete = async () => {
-    if (!date) return;
-    setError(""); setLoading(true);
+  const handleSave = async () => {
+    setLoading(true); setError("");
     try {
-      const data = await apiFetch("/records/date", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, type }) });
-      onSuccess(data);
-      setSuccessMsg(`Records for ${formatDate(date)} deleted.`); setDate("");
-    } catch (e) { setError(e instanceof Error ? e.message : "Delete failed"); }
+      await apiJson<{ ok: boolean; note: string }>(`/records/purchase/${purchaseId}/note`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: text }),
+      });
+      onSaved(purchaseId, text.trim());
+      onClose();
+    } catch (e) { setError(e instanceof Error ? e.message : "Failed to save note"); }
     finally { setLoading(false); }
   };
 
@@ -273,41 +374,32 @@ function DeleteByDateModal({ salesDates, purchaseDates, onClose, onSuccess }: {
         className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-md">
         <div className="flex items-center justify-between p-6 border-b border-border">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-destructive/10 rounded-lg"><CalendarX className="w-5 h-5 text-destructive" /></div>
-            <h3 className="font-bold text-lg text-foreground">Delete by Date</h3>
+            <div className="p-2 bg-primary/10 rounded-lg"><MessageSquare className="w-5 h-5 text-primary" /></div>
+            <h3 className="font-bold text-lg text-foreground">Add / Edit Note</h3>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
         </div>
-        <div className="p-6 space-y-5">
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Record Type</label>
-            <div className="flex rounded-xl overflow-hidden border border-border">
-              {(["sale","purchase"] as const).map((t) => (
-                <button key={t} onClick={() => { setType(t); setDate(""); }}
-                  className={cn("flex-1 px-4 py-2.5 text-sm font-medium transition-colors capitalize",
-                    type === t ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground")}>
-                  {t === "sale" ? "Sales" : "Purchases"}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Select Date</label>
-            <select value={date} onChange={(e) => setDate(e.target.value)} className={inputCls}>
-              <option value="">-- Choose a date --</option>
-              {dates.map((d) => <option key={d} value={d}>{formatDate(d)}</option>)}
-            </select>
-            {dates.length === 0 && <p className="text-xs text-muted-foreground">No {type} dates available.</p>}
-          </div>
-          {successMsg && <p className="text-sm text-green-400 flex items-center space-x-1"><span>✓</span><span>{successMsg}</span></p>}
+        <div className="p-6 space-y-3">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={4}
+            placeholder="Enter your note for this purchase record..."
+            className={cn(inputCls, "resize-none")}
+          />
+          {text.trim() && (
+            <button onClick={() => setText("")} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+              Clear note
+            </button>
+          )}
           {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
         </div>
         <div className="flex space-x-3 p-6 pt-0">
-          <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Close</button>
-          <button onClick={handleDelete} disabled={!date || loading}
-            className="flex-1 px-4 py-3 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center space-x-2">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            <span>{loading ? "Deleting..." : "Delete Records"}</span>
+          <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Cancel</button>
+          <button onClick={handleSave} disabled={loading}
+            className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors font-medium flex items-center justify-center space-x-2">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+            <span>{loading ? "Saving..." : "Save Note"}</span>
           </button>
         </div>
       </motion.div>
@@ -315,9 +407,273 @@ function DeleteByDateModal({ salesDates, purchaseDates, onClose, onSuccess }: {
   );
 }
 
+/* ── Lot Info Modal ───────────────────────────────────────────────────────────── */
+function LotInfoModal({ row, onClose }: { row: SaleRow; onClose: () => void }) {
+  const hasInfo = row.kpNo || row.farmerName || row.village;
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+        className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-sm">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-blue-500/10 rounded-lg"><Info className="w-5 h-5 text-blue-400" /></div>
+            <div>
+              <h3 className="font-bold text-lg text-foreground">Lot Information</h3>
+              <p className="text-xs text-muted-foreground">{row.item} · {formatDate(row.saleDate)} · {row.qty} QTL</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
+        </div>
+        <div className="p-6">
+          {hasInfo ? (
+            <div className="space-y-3">
+              {[["KP No.", row.kpNo], ["Farmer Name", row.farmerName], ["Village", row.village]].map(([label, val]) => (
+                <div key={label} className="flex justify-between items-center py-2 border-b border-border/50 last:border-0">
+                  <span className="text-sm font-medium text-muted-foreground">{label}</span>
+                  <span className="text-sm font-semibold text-foreground">{val || "—"}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No additional information available for this lot.</p>
+          )}
+        </div>
+        <div className="p-6 pt-0">
+          <button onClick={onClose} className="w-full px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Close</button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ── Delete by Date Modal ─────────────────────────────────────────────────────── */
+function DeleteByDateModal({ salesDates, purchaseDates, onClose, onSuccess, userEmail }: {
+  salesDates: string[]; purchaseDates: string[];
+  onClose: () => void; onSuccess: (data: ReconciliationResult) => void;
+  userEmail?: string;
+}) {
+  type ModalView = "delete" | "change-password" | "forgot-password";
+  const [view, setView] = useState<ModalView>("delete");
+  const [type, setType] = useState<"sale" | "purchase">("sale");
+  const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [oldPw, setOldPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const dates = type === "sale" ? salesDates : purchaseDates;
+
+  const toggleDate = (d: string) => {
+    setSelectedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(d)) next.delete(d); else next.add(d);
+      return next;
+    });
+  };
+  const toggleAll = () => {
+    if (selectedDates.size === dates.length) setSelectedDates(new Set());
+    else setSelectedDates(new Set(dates));
+  };
+
+  const handleDelete = async () => {
+    if (selectedDates.size === 0 || !password) { setError("Select at least one date and enter the password."); return; }
+    setError(""); setLoading(true);
+    try {
+      const data = await apiFetch("/records/date", {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dates: [...selectedDates], type, password }),
+      });
+      onSuccess(data);
+      setSuccessMsg(`${selectedDates.size} date(s) deleted.`);
+      setSelectedDates(new Set()); setPassword("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Delete failed"); }
+    finally { setLoading(false); }
+  };
+
+  const handleChangePassword = async () => {
+    if (!oldPw || !newPw) { setError("Fill in all fields."); return; }
+    if (newPw !== confirmPw) { setError("New passwords do not match."); return; }
+    setError(""); setLoading(true);
+    try {
+      await apiJson<{ ok: boolean }>("/settings/delete-password", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw }),
+      });
+      setSuccessMsg("Password changed successfully."); setView("delete");
+      setOldPw(""); setNewPw(""); setConfirmPw("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Failed"); }
+    finally { setLoading(false); }
+  };
+
+  const handleResetPassword = async () => {
+    setError(""); setLoading(true);
+    try {
+      await apiJson<{ ok: boolean }>("/settings/reset-delete-password", { method: "POST" });
+      setSuccessMsg("Password reset to default 'confirm'."); setView("delete");
+    } catch (e) { setError(e instanceof Error ? e.message : "Failed"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+        className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-md max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-destructive/10 rounded-lg">
+              {view === "delete" ? <CalendarX className="w-5 h-5 text-destructive" /> :
+               view === "change-password" ? <Key className="w-5 h-5 text-amber-400" /> :
+               <Lock className="w-5 h-5 text-blue-400" />}
+            </div>
+            <h3 className="font-bold text-lg text-foreground">
+              {view === "delete" ? "Delete by Date" : view === "change-password" ? "Change Password" : "Reset Password"}
+            </h3>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
+        </div>
+
+        {/* Main delete view */}
+        {view === "delete" && (
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="overflow-y-auto flex-1 p-6 space-y-5">
+              {/* Record type toggle */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-foreground">Record Type</label>
+                <div className="flex rounded-xl overflow-hidden border border-border">
+                  {(["sale","purchase"] as const).map((t) => (
+                    <button key={t} onClick={() => { setType(t); setSelectedDates(new Set()); }}
+                      className={cn("flex-1 px-4 py-2.5 text-sm font-medium transition-colors capitalize",
+                        type === t ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground")}>
+                      {t === "sale" ? "Sales" : "Purchases"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date checklist */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold text-foreground">Select Dates</label>
+                  {dates.length > 0 && (
+                    <button onClick={toggleAll} className="text-xs text-primary hover:text-primary/80 transition-colors font-medium">
+                      {selectedDates.size === dates.length ? "Deselect All" : "Select All"}
+                    </button>
+                  )}
+                </div>
+                {dates.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No {type} dates available.</p>
+                ) : (
+                  <div className="border border-border rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                    {dates.map((d) => (
+                      <label key={d} className={cn("flex items-center space-x-3 px-4 py-2.5 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0",
+                        selectedDates.has(d) && "bg-destructive/5")}>
+                        <input type="checkbox" checked={selectedDates.has(d)} onChange={() => toggleDate(d)}
+                          className="w-4 h-4 accent-primary rounded" />
+                        <span className="text-sm text-foreground">{formatDate(d)}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {selectedDates.size > 0 && (
+                  <p className="text-xs text-destructive font-medium">{selectedDates.size} date(s) selected</p>
+                )}
+              </div>
+
+              {/* Password */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold text-foreground flex items-center space-x-1.5">
+                    <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span>Delete Password</span>
+                  </label>
+                  <button onClick={() => { setView("change-password"); setError(""); setSuccessMsg(""); }}
+                    className="text-xs text-primary hover:text-primary/80 transition-colors font-medium">
+                    Change Password
+                  </button>
+                </div>
+                <input type="password" placeholder="Enter delete password" value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleDelete()}
+                  className={inputCls} />
+                <button onClick={() => { setView("forgot-password"); setError(""); setSuccessMsg(""); }}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  Forgot password?
+                </button>
+              </div>
+
+              {successMsg && <p className="text-sm text-green-400 flex items-center space-x-1"><CheckCircle2 className="w-4 h-4 shrink-0" /><span>{successMsg}</span></p>}
+              {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
+            </div>
+            <div className="flex space-x-3 p-6 pt-0 shrink-0 border-t border-border">
+              <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Close</button>
+              <button onClick={handleDelete} disabled={selectedDates.size === 0 || !password || loading}
+                className="flex-1 px-4 py-3 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center space-x-2">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                <span>{loading ? "Deleting..." : `Delete${selectedDates.size > 0 ? ` (${selectedDates.size})` : ""}`}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Change password view */}
+        {view === "change-password" && (
+          <div className="p-6 space-y-4">
+            <p className="text-sm text-muted-foreground">Default password is <code className="bg-muted px-1 rounded text-xs">confirm</code>.</p>
+            <div className="space-y-3">
+              {[["Current Password", oldPw, setOldPw], ["New Password", newPw, setNewPw], ["Confirm New Password", confirmPw, setConfirmPw]].map(([label, val, setter]) => (
+                <div key={String(label)} className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{String(label)}</label>
+                  <input type="password" value={String(val)} onChange={(e) => (setter as (v: string) => void)(e.target.value)} className={inputCls} />
+                </div>
+              ))}
+            </div>
+            {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
+            <div className="flex space-x-3 pt-2">
+              <button onClick={() => { setView("delete"); setError(""); }} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Back</button>
+              <button onClick={handleChangePassword} disabled={loading}
+                className="flex-1 px-4 py-3 rounded-xl bg-amber-500 text-white hover:bg-amber-500/90 disabled:opacity-50 transition-colors font-medium flex items-center justify-center space-x-2">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
+                <span>{loading ? "Saving..." : "Change Password"}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Forgot password view */}
+        {view === "forgot-password" && (
+          <div className="p-6 space-y-5">
+            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+              <p className="text-sm text-blue-300 font-medium mb-1">Account verified</p>
+              <p className="text-xs text-muted-foreground">
+                Since you are logged in as <strong className="text-foreground">{userEmail || "your Google account"}</strong>, we can reset your delete password to the default.
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              This will reset the delete password back to <code className="bg-muted px-1 rounded text-xs">confirm</code>.
+            </p>
+            {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
+            <div className="flex space-x-3">
+              <button onClick={() => { setView("delete"); setError(""); }} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Back</button>
+              <button onClick={handleResetPassword} disabled={loading}
+                className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors font-medium flex items-center justify-center space-x-2">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                <span>{loading ? "Resetting..." : "Reset Password"}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
 /* ── Reusable Sale Form Fields ─────────────────────────────────────────────────── */
 function SaleFormFields({ form, onChange, amountManual, onAmountChange }: {
-  form: { saleDate: string; item: string; qty: string; rate: string; amount: string };
+  form: { saleDate: string; item: string; qty: string; rate: string; amount: string; kpNo?: string; farmerName?: string; village?: string };
   onChange: (k: string, v: string) => void;
   amountManual: boolean;
   onAmountChange: (v: string) => void;
@@ -347,13 +703,29 @@ function SaleFormFields({ form, onChange, amountManual, onAmountChange }: {
         </label>
         <input type="number" step="0.01" placeholder="0.00" value={form.amount} onChange={(e) => onAmountChange(e.target.value)} className={inputCls} />
       </div>
+      {/* Optional fields */}
+      <div className="col-span-2 border-t border-border/50 pt-3 space-y-0.5">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Optional — Lot Details</p>
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">KP No.</label>
+        <input type="text" placeholder="e.g. KP001" value={form.kpNo ?? ""} onChange={(e) => onChange("kpNo", e.target.value)} className={inputCls} />
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Village</label>
+        <input type="text" placeholder="e.g. Nashik" value={form.village ?? ""} onChange={(e) => onChange("village", e.target.value)} className={inputCls} />
+      </div>
+      <div className="col-span-2 space-y-1.5">
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Farmer Name</label>
+        <input type="text" placeholder="e.g. Rajesh Patil" value={form.farmerName ?? ""} onChange={(e) => onChange("farmerName", e.target.value)} className={inputCls} />
+      </div>
     </div>
   );
 }
 
 /* ── Add Sale Modal ──────────────────────────────────────────────────────────── */
 function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (data: ReconciliationResult) => void }) {
-  const [form, setForm] = useState({ saleDate: "", item: "", qty: "", rate: "", amount: "" });
+  const [form, setForm] = useState({ saleDate: "", item: "", qty: "", rate: "", amount: "", kpNo: "", farmerName: "", village: "" });
   const [amountManual, setAmountManual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -371,12 +743,19 @@ function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
   };
 
   const handleSubmit = async () => {
-    if (!form.saleDate || !form.item || !form.qty || !form.rate || !form.amount) { setError("All fields are required."); return; }
+    if (!form.saleDate || !form.item || !form.qty || !form.rate || !form.amount) { setError("Sale Date, Item, Qty, Rate, Amount are required."); return; }
     setError(""); setLoading(true);
     try {
-      const data = await apiFetch("/records/sale", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ saleDate: form.saleDate, item: form.item.trim(), qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: parseFloat(form.amount) }) });
+      const data = await apiFetch("/records/sale", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          saleDate: form.saleDate, item: form.item.trim(),
+          qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: parseFloat(form.amount),
+          kpNo: form.kpNo.trim() || undefined, farmerName: form.farmerName.trim() || undefined, village: form.village.trim() || undefined,
+        }),
+      });
       onSuccess(data); setSuccessMsg(`Sale added for ${formatDate(form.saleDate)}.`);
-      setForm({ saleDate: "", item: "", qty: "", rate: "", amount: "" }); setAmountManual(false);
+      setForm({ saleDate: "", item: "", qty: "", rate: "", amount: "", kpNo: "", farmerName: "", village: "" }); setAmountManual(false);
     } catch (e) { setError(e instanceof Error ? e.message : "Failed"); }
     finally { setLoading(false); }
   };
@@ -384,20 +763,20 @@ function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-        className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b border-border">
+        className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-md max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-primary/10 rounded-lg"><Plus className="w-5 h-5 text-primary" /></div>
             <h3 className="font-bold text-lg text-foreground">Add Sale Record</h3>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="overflow-y-auto flex-1 p-6 space-y-4">
           <SaleFormFields form={form} onChange={handleChange} amountManual={amountManual} onAmountChange={(v) => { setAmountManual(true); setForm((f) => ({ ...f, amount: v })); }} />
           {successMsg && <p className="text-sm text-green-400">✓ {successMsg}</p>}
           {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
         </div>
-        <div className="flex space-x-3 p-6 pt-0">
+        <div className="flex space-x-3 p-6 pt-0 shrink-0 border-t border-border">
           <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Close</button>
           <button onClick={handleSubmit} disabled={loading}
             className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors font-medium flex items-center justify-center space-x-2">
@@ -412,7 +791,11 @@ function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
 
 /* ── Edit Sale Modal ─────────────────────────────────────────────────────────── */
 function EditSaleModal({ row, onClose, onSuccess }: { row: SaleRow; onClose: () => void; onSuccess: (data: ReconciliationResult) => void }) {
-  const [form, setForm] = useState({ saleDate: row.saleDate, item: row.item, qty: String(row.qty), rate: String(row.rate), amount: String(row.amount) });
+  const [form, setForm] = useState({
+    saleDate: row.saleDate, item: row.item,
+    qty: String(row.qty), rate: String(row.rate), amount: String(row.amount),
+    kpNo: row.kpNo ?? "", farmerName: row.farmerName ?? "", village: row.village ?? "",
+  });
   const [amountManual, setAmountManual] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -429,10 +812,17 @@ function EditSaleModal({ row, onClose, onSuccess }: { row: SaleRow; onClose: () 
   };
 
   const handleSubmit = async () => {
-    if (!form.saleDate || !form.item || !form.qty || !form.rate || !form.amount) { setError("All fields are required."); return; }
+    if (!form.saleDate || !form.item || !form.qty || !form.rate || !form.amount) { setError("All required fields are needed."); return; }
     setError(""); setLoading(true);
     try {
-      const data = await apiFetch(`/records/sale/${row.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ saleDate: form.saleDate, item: form.item.trim(), qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: parseFloat(form.amount) }) });
+      const data = await apiFetch(`/records/sale/${row.id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          saleDate: form.saleDate, item: form.item.trim(),
+          qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: parseFloat(form.amount),
+          kpNo: form.kpNo.trim() || undefined, farmerName: form.farmerName.trim() || undefined, village: form.village.trim() || undefined,
+        }),
+      });
       onSuccess(data); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "Failed"); }
     finally { setLoading(false); }
@@ -441,8 +831,8 @@ function EditSaleModal({ row, onClose, onSuccess }: { row: SaleRow; onClose: () 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-        className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b border-border">
+        className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-md max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-amber-500/10 rounded-lg"><Edit2 className="w-5 h-5 text-amber-500" /></div>
             <div>
@@ -452,11 +842,11 @@ function EditSaleModal({ row, onClose, onSuccess }: { row: SaleRow; onClose: () 
           </div>
           <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="overflow-y-auto flex-1 p-6 space-y-4">
           <SaleFormFields form={form} onChange={handleChange} amountManual={amountManual} onAmountChange={(v) => { setAmountManual(true); setForm((f) => ({ ...f, amount: v })); }} />
           {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
         </div>
-        <div className="flex space-x-3 p-6 pt-0">
+        <div className="flex space-x-3 p-6 pt-0 shrink-0 border-t border-border">
           <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Cancel</button>
           <button onClick={handleSubmit} disabled={loading}
             className="flex-1 px-4 py-3 rounded-xl bg-amber-500 text-white hover:bg-amber-500/90 disabled:opacity-50 transition-colors font-medium flex items-center justify-center space-x-2">
@@ -598,10 +988,9 @@ function EditPurchaseModal({ row, onClose, onSuccess }: { row: PurchaseRow; onCl
 }
 
 /* ── Why Unmatched Modal ─────────────────────────────────────────────────────── */
-function WhyUnmatchedModal({ type, row, allData, onClose }: {
+function WhyUnmatchedModal({ type, row, onClose }: {
   type: "sale" | "purchase";
   row: SaleRow | PurchaseRow;
-  allData: ReconciliationResult;
   onClose: () => void;
 }) {
   const [loading, setLoading] = useState(true);
@@ -634,7 +1023,7 @@ function WhyUnmatchedModal({ type, row, allData, onClose }: {
         <div className="overflow-y-auto flex-1 p-6 space-y-4">
           {loading && <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>}
           {error && <p className="text-sm text-destructive">{error}</p>}
-          {result && result.globalReason && (
+          {result?.globalReason && (
             <div className="p-4 bg-muted/50 rounded-xl text-sm text-muted-foreground flex items-start space-x-2">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /><span>{result.globalReason}</span>
             </div>
@@ -642,7 +1031,7 @@ function WhyUnmatchedModal({ type, row, allData, onClose }: {
           {result && result.candidates.length === 0 && !result.globalReason && (
             <p className="text-sm text-muted-foreground text-center py-8">No candidate records found.</p>
           )}
-          {result && result.candidates.map((c, idx) => (
+          {result?.candidates.map((c, idx) => (
             <div key={idx} className="border border-border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border">
                 <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
@@ -702,6 +1091,20 @@ function ManualMatchModal({ sale, allData, onClose, onSuccess }: {
   const [purchaseSearch, setPurchaseSearch] = useState("");
 
   const unmatchedPurchases = allData.purchaseRows.filter((p) => p.status !== "Matched");
+
+  const closeMatches = useMemo(() => {
+    const saleItemNorm = sale.item.trim().toLowerCase();
+    return unmatchedPurchases.map((p) => {
+      let score = 0;
+      if (p.item.trim().toLowerCase() === saleItemNorm) score++;
+      if (p.purchaseDate === sale.saleDate) score++;
+      if (p.qty === sale.qty) score++;
+      if (p.rate === sale.rate) score++;
+      if (Math.abs(p.amount - sale.amount) <= 0.02) score++;
+      return { ...p, matchScore: score };
+    }).filter((p) => p.matchScore >= 3).sort((a, b) => b.matchScore - a.matchScore);
+  }, [unmatchedPurchases, sale]);
+
   const filteredPurchases = unmatchedPurchases.filter((p) =>
     !purchaseSearch ||
     p.item.toLowerCase().includes(purchaseSearch.toLowerCase()) ||
@@ -716,11 +1119,11 @@ function ManualMatchModal({ sale, allData, onClose, onSuccess }: {
   };
 
   const fields: { key: string; label: string; saleKey?: string; purKey?: string }[] = [
-    { key: "item",         label: "Item",          saleKey: "item",         purKey: "item" },
-    { key: "date",         label: "Date",           saleKey: "saleDate",     purKey: "purchaseDate" },
-    { key: "qty",          label: "Qty",            saleKey: "qty",          purKey: "qty" },
-    { key: "rate",         label: "Rate",           saleKey: "rate",         purKey: "rate" },
-    { key: "amount",       label: "Amount",         saleKey: "amount",       purKey: "amount" },
+    { key: "item",   label: "Item",   saleKey: "item",     purKey: "item" },
+    { key: "date",   label: "Date",   saleKey: "saleDate", purKey: "purchaseDate" },
+    { key: "qty",    label: "Qty",    saleKey: "qty",      purKey: "qty" },
+    { key: "rate",   label: "Rate",   saleKey: "rate",     purKey: "rate" },
+    { key: "amount", label: "Amount", saleKey: "amount",   purKey: "amount" },
   ];
 
   const isMatch = (f: typeof fields[0]) => {
@@ -737,8 +1140,7 @@ function ManualMatchModal({ sale, allData, onClose, onSuccess }: {
       const data = await apiFetch("/manual-match", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          saleId: sale.id,
-          purchaseId: selectedPurchase.id,
+          saleId: sale.id, purchaseId: selectedPurchase.id,
           saleCorrections: Object.keys(saleCorr).length ? saleCorr : undefined,
           purchaseCorrections: Object.keys(purCorr).length ? purCorr : undefined,
         }),
@@ -748,19 +1150,24 @@ function ManualMatchModal({ sale, allData, onClose, onSuccess }: {
     finally { setLoading(false); }
   };
 
+  const purchaseRowCls = "hover:bg-muted/20";
+  const selectBtn = (p: PurchaseRow) => (
+    <button onClick={() => { setSelectedPurchase(p); setStep(2); }}
+      className="px-3 py-1.5 text-xs font-medium bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors">
+      Select
+    </button>
+  );
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
         className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-3xl max-h-[90vh] flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-primary/10 rounded-lg"><Link2 className="w-5 h-5 text-primary" /></div>
             <div>
               <h3 className="font-bold text-lg text-foreground">Manual Match</h3>
-              <p className="text-xs text-muted-foreground">
-                Sale · {formatDate(sale.saleDate)} · {sale.item} · {sale.qty} QTL
-              </p>
+              <p className="text-xs text-muted-foreground">Sale · {formatDate(sale.saleDate)} · {sale.item} · {sale.qty} QTL</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">
@@ -776,16 +1183,59 @@ function ManualMatchModal({ sale, allData, onClose, onSuccess }: {
           </div>
         </div>
 
-        {/* Step 1: Select a purchase */}
         {step === 1 && (
           <div className="flex flex-col flex-1 min-h-0">
-            <div className="p-5 border-b border-border shrink-0">
-              <p className="text-sm font-medium text-foreground mb-3">Select an unmatched purchase to link with this sale:</p>
+            <div className="p-5 border-b border-border shrink-0 space-y-3">
+              <p className="text-sm font-medium text-foreground">Select an unmatched purchase to link with this sale:</p>
               <input type="text" placeholder="Search by item, date, qty…" value={purchaseSearch}
                 onChange={(e) => setPurchaseSearch(e.target.value)}
                 className={cn(inputCls, "max-w-xs")} />
             </div>
             <div className="overflow-y-auto flex-1">
+              {closeMatches.length > 0 && !purchaseSearch && (
+                <div>
+                  <div className="px-4 py-2 bg-amber-500/10 border-b border-border flex items-center space-x-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Close Matches ({closeMatches.length})</span>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="text-xs text-muted-foreground uppercase bg-amber-500/5 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left">Score</th>
+                        <th className="px-4 py-2 text-left">Bill Date</th>
+                        <th className="px-4 py-2 text-left text-primary">Purchase Date</th>
+                        <th className="px-4 py-2 text-left">Item</th>
+                        <th className="px-4 py-2 text-right">Qty</th>
+                        <th className="px-4 py-2 text-right">Rate</th>
+                        <th className="px-4 py-2 text-right">Amount</th>
+                        <th className="px-4 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      {closeMatches.map((p) => (
+                        <tr key={p.id} className={cn(purchaseRowCls, "bg-amber-500/5")}>
+                          <td className="px-4 py-3">
+                            <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full",
+                              p.matchScore === 5 ? "bg-green-500/20 text-green-400" : "bg-amber-500/20 text-amber-400")}>
+                              {p.matchScore}/5
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">{formatDate(p.billDate)}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-primary">{formatDate(p.purchaseDate)}</td>
+                          <td className="px-4 py-3">{p.item}</td>
+                          <td className="px-4 py-3 text-right">{p.qty.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right">{p.rate}</td>
+                          <td className="px-4 py-3 text-right">{formatCurrency(p.amount)}</td>
+                          <td className="px-4 py-3">{selectBtn(p)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="px-4 py-2 bg-muted/30 border-b border-t border-border">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">All Unmatched</span>
+                  </div>
+                </div>
+              )}
               {filteredPurchases.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-12">No unmatched purchases found.</p>
               ) : (
@@ -803,19 +1253,14 @@ function ManualMatchModal({ sale, allData, onClose, onSuccess }: {
                   </thead>
                   <tbody className="divide-y divide-border/50">
                     {filteredPurchases.map((p) => (
-                      <tr key={p.id} className="hover:bg-muted/20">
+                      <tr key={p.id} className={purchaseRowCls}>
                         <td className="px-4 py-3 whitespace-nowrap">{formatDate(p.billDate)}</td>
                         <td className="px-4 py-3 whitespace-nowrap text-primary">{formatDate(p.purchaseDate)}</td>
                         <td className="px-4 py-3">{p.item}</td>
                         <td className="px-4 py-3 text-right">{p.qty.toFixed(2)}</td>
                         <td className="px-4 py-3 text-right">{p.rate}</td>
                         <td className="px-4 py-3 text-right">{formatCurrency(p.amount)}</td>
-                        <td className="px-4 py-3">
-                          <button onClick={() => { setSelectedPurchase(p); setStep(2); }}
-                            className="px-3 py-1.5 text-xs font-medium bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors">
-                            Select
-                          </button>
-                        </td>
+                        <td className="px-4 py-3">{selectBtn(p)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -828,13 +1273,10 @@ function ManualMatchModal({ sale, allData, onClose, onSuccess }: {
           </div>
         )}
 
-        {/* Step 2: Review & correct fields */}
         {step === 2 && selectedPurchase && (
           <div className="flex flex-col flex-1 min-h-0">
             <div className="overflow-y-auto flex-1 p-6 space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Review the field comparison below. Highlighted rows have mismatches — correct them before locking the match.
-              </p>
+              <p className="text-sm text-muted-foreground">Review the field comparison below. Highlighted rows have mismatches — correct them before locking.</p>
               <div className="rounded-xl border border-border overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
@@ -924,10 +1366,12 @@ function ManualMatchModal({ sale, allData, onClose, onSuccess }: {
 /* ── Results View ────────────────────────────────────────────────────────────── */
 type TabId = "all-sales" | "pending" | "purchase";
 
-function ResultsView({ data, onDataChange, selectedFY }: {
+function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail }: {
   data: ReconciliationResult;
   onDataChange: (d: ReconciliationResult) => void;
   selectedFY: string;
+  selectedMonths: string[];
+  userEmail?: string;
 }) {
   const [activeTab, setActiveTab] = useState<TabId>("pending");
   const [showDeleteByDate, setShowDeleteByDate] = useState(false);
@@ -940,12 +1384,19 @@ function ResultsView({ data, onDataChange, selectedFY }: {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [noteModal, setNoteModal] = useState<{ id: number; note: string } | null>(null);
+  const [lotInfoRow, setLotInfoRow] = useState<SaleRow | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const { handleDownload, downloading } = useReconciliationDownloads();
 
-  // Reset selection when tab changes
+  useEffect(() => {
+    apiJson<{ notes: Record<string, string> }>("/notes")
+      .then((d) => setNotes(d.notes))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => { setSelectedIds(new Set()); }, [activeTab]);
 
-  // Search filters
   type SF = { saleDate: string; item: string; qty: string; rate: string; amount: string; billDate: string; status: string };
   const [sf, setSf] = useState<SF>({ saleDate: "", item: "", qty: "", rate: "", amount: "", billDate: "", status: "" });
   type PF = { billDate: string; purchaseDate: string; item: string; qty: string; rate: string; amount: string; status: string };
@@ -985,15 +1436,27 @@ function ResultsView({ data, onDataChange, selectedFY }: {
   ];
 
   const downloadBtns = [
-    { fileType: "updated-sales",      label: "Updated Sales",       filename: `updated_sales_${selectedFY}.xlsx` },
-    { fileType: "pending-pavati",     label: "Pending Pavati",      filename: `pending_pavati_${selectedFY}.xlsx` },
-    { fileType: "datewise-report",    label: "Datewise Report",     filename: `datewise_report_${selectedFY}.xlsx` },
-    { fileType: "purchase-exceptions",label: "Purchase Exceptions", filename: `purchase_exceptions_${selectedFY}.xlsx` },
-    { fileType: "monthly-matrix-qty", label: "Matrix (Qty)",        filename: `monthly_matrix_qty_${selectedFY}.xlsx` },
-    { fileType: "monthly-matrix-amount",label:"Matrix (Amount)",    filename: `monthly_matrix_amount_${selectedFY}.xlsx` },
+    { fileType: "updated-sales",        label: "Updated Sales",       filename: `updated_sales_${selectedFY}.xlsx` },
+    { fileType: "pending-pavati",       label: "Pending Pavati",      filename: `pending_pavati_${selectedFY}.xlsx` },
+    { fileType: "datewise-report",      label: "Datewise Report",     filename: `datewise_report_${selectedFY}.xlsx` },
+    { fileType: "purchase-exceptions",  label: "Purchase Exceptions", filename: `purchase_exceptions_${selectedFY}.xlsx` },
+    { fileType: "monthly-matrix-qty",   label: "Matrix (Qty)",        filename: `monthly_matrix_qty_${selectedFY}.xlsx` },
+    { fileType: "monthly-matrix-amount",label: "Matrix (Amount)",     filename: `monthly_matrix_amount_${selectedFY}.xlsx` },
   ];
 
   const actionBtnCls = "p-1.5 rounded-lg transition-colors disabled:opacity-50";
+
+  const summaryTotals = data.summary.reduce(
+    (acc, row) => ({
+      salesQty: acc.salesQty + row.salesQty,
+      salesAmount: acc.salesAmount + row.salesAmount,
+      purchaseQty: acc.purchaseQty + row.purchaseQty,
+      purchaseAmount: acc.purchaseAmount + row.purchaseAmount,
+      pendingQty: acc.pendingQty + row.pendingQty,
+      pendingAmount: acc.pendingAmount + row.pendingAmount,
+    }),
+    { salesQty: 0, salesAmount: 0, purchaseQty: 0, purchaseAmount: 0, pendingQty: 0, pendingAmount: 0 }
+  );
 
   return (
     <div className="space-y-6">
@@ -1006,7 +1469,7 @@ function ResultsView({ data, onDataChange, selectedFY }: {
       </div>
 
       {/* Monthly chart */}
-      <MonthlyChart data={data} />
+      <MonthlyChart data={data} selectedMonths={selectedMonths} />
 
       {/* Commodity summary */}
       {data.summary.length > 0 && (
@@ -1035,6 +1498,17 @@ function ResultsView({ data, onDataChange, selectedFY }: {
                     <td className="px-4 py-3 font-semibold text-amber-400">{formatCurrency(row.pendingAmount)}</td>
                   </tr>
                 ))}
+                {data.summary.length > 1 && (
+                  <tr className="bg-primary/5 border-t-2 border-primary/20">
+                    <td className="px-4 py-3 font-bold text-foreground">Total</td>
+                    <td className="px-4 py-3 font-bold">{summaryTotals.salesQty.toFixed(2)}</td>
+                    <td className="px-4 py-3 font-bold">{formatCurrency(summaryTotals.salesAmount)}</td>
+                    <td className="px-4 py-3 font-bold">{summaryTotals.purchaseQty.toFixed(2)}</td>
+                    <td className="px-4 py-3 font-bold">{formatCurrency(summaryTotals.purchaseAmount)}</td>
+                    <td className="px-4 py-3 font-bold text-amber-400">{summaryTotals.pendingQty.toFixed(2)}</td>
+                    <td className="px-4 py-3 font-bold text-amber-400">{formatCurrency(summaryTotals.pendingAmount)}</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1059,7 +1533,6 @@ function ResultsView({ data, onDataChange, selectedFY }: {
 
       {/* Data tables */}
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
-        {/* Tabs + action buttons */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-b border-border">
           <div className="flex rounded-xl overflow-hidden border border-border w-fit">
             {tabs.map((t, i) => (
@@ -1096,7 +1569,7 @@ function ResultsView({ data, onDataChange, selectedFY }: {
         </div>
 
         <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
-          {/* ── PENDING PAVATI TAB ── */}
+          {/* ── PENDING / ALL-SALES TAB ── */}
           {(activeTab === "pending" || activeTab === "all-sales") && (
             <table className="w-full text-sm text-left relative">
               <thead className="text-xs text-muted-foreground uppercase bg-card sticky top-0 border-b border-border shadow-sm z-10">
@@ -1140,6 +1613,7 @@ function ResultsView({ data, onDataChange, selectedFY }: {
                   .filter((r) => matchF(formatDate(r.saleDate), sf.saleDate) && matchF(r.item, sf.item) && matchF(r.qty.toFixed(2), sf.qty) && matchF(r.rate, sf.rate) && matchF(r.amount, sf.amount) && matchF(r.purchaseBillDate ? formatDate(r.purchaseBillDate) : "", sf.billDate) && matchF(r.status, sf.status))
                   .map((row) => {
                     const days = row.status === "Pending" ? daysSince(row.saleDate) : 0;
+                    const hasLotInfo = !!(row.kpNo || row.farmerName || row.village);
                     return (
                       <tr key={row.id} className={cn("hover:bg-muted/30", selectedIds.has(row.id!) && "bg-primary/5")}>
                         <td className="px-3 py-3">
@@ -1169,6 +1643,10 @@ function ResultsView({ data, onDataChange, selectedFY }: {
                             <button onClick={() => setEditSaleRow(row)} disabled={!!deletingId}
                               className={cn(actionBtnCls, "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10")} title="Edit record">
                               <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setLotInfoRow(row)}
+                              className={cn(actionBtnCls, hasLotInfo ? "text-blue-400 hover:bg-blue-400/10" : "text-muted-foreground hover:text-blue-400 hover:bg-blue-400/10")} title="Lot info (KP No., Farmer, Village)">
+                              <Info className="w-4 h-4" />
                             </button>
                             {row.status === "Pending" && (
                               <>
@@ -1239,38 +1717,46 @@ function ResultsView({ data, onDataChange, selectedFY }: {
                 {data.purchaseRows
                   .filter((r) => r.status !== "Matched")
                   .filter((r) => matchF(formatDate(r.billDate), pf.billDate) && matchF(formatDate(r.purchaseDate), pf.purchaseDate) && matchF(r.item, pf.item) && matchF(r.qty.toFixed(2), pf.qty) && matchF(r.rate, pf.rate) && matchF(r.amount, pf.amount) && matchF(r.status, pf.status))
-                  .map((row) => (
-                    <tr key={row.id} className={cn("hover:bg-muted/30", selectedIds.has(row.id!) && "bg-primary/5")}>
-                      <td className="px-3 py-3">
-                        <button onClick={() => toggleId(row.id!)} className="p-0.5 hover:text-primary transition-colors">
-                          {selectedIds.has(row.id!) ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4 text-muted-foreground" />}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(row.billDate)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap font-medium text-primary">{formatDate(row.purchaseDate)}</td>
-                      <td className="px-4 py-3">{row.item}</td>
-                      <td className="px-4 py-3 text-right">{row.qty.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right">{row.rate}</td>
-                      <td className="px-4 py-3 text-right font-medium">{formatCurrency(row.amount)}</td>
-                      <td className="px-4 py-3 text-center"><StatusBadge status={row.status} /></td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center space-x-1">
-                          <button onClick={() => setEditPurchaseRow(row)} disabled={!!deletingId}
-                            className={cn(actionBtnCls, "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10")} title="Edit record">
-                            <Edit2 className="w-4 h-4" />
+                  .map((row) => {
+                    const hasNote = !!notes[String(row.id)];
+                    return (
+                      <tr key={row.id} className={cn("hover:bg-muted/30", selectedIds.has(row.id!) && "bg-primary/5")}>
+                        <td className="px-3 py-3">
+                          <button onClick={() => toggleId(row.id!)} className="p-0.5 hover:text-primary transition-colors">
+                            {selectedIds.has(row.id!) ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4 text-muted-foreground" />}
                           </button>
-                          <button onClick={() => setWhyUnmatched({ type: "purchase", row })}
-                            className={cn(actionBtnCls, "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10")} title="Why didn't this match?">
-                            <HelpCircle className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => row.id != null && handleDeleteRow("purchase", row.id)} disabled={deletingId === row.id}
-                            className={cn(actionBtnCls, "text-muted-foreground hover:text-destructive hover:bg-destructive/10")} title="Delete">
-                            {deletingId === row.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">{formatDate(row.billDate)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap font-medium text-primary">{formatDate(row.purchaseDate)}</td>
+                        <td className="px-4 py-3">{row.item}</td>
+                        <td className="px-4 py-3 text-right">{row.qty.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right">{row.rate}</td>
+                        <td className="px-4 py-3 text-right font-medium">{formatCurrency(row.amount)}</td>
+                        <td className="px-4 py-3 text-center"><StatusBadge status={row.status} /></td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center space-x-1">
+                            <button onClick={() => setEditPurchaseRow(row)} disabled={!!deletingId}
+                              className={cn(actionBtnCls, "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10")} title="Edit record">
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setNoteModal({ id: row.id!, note: notes[String(row.id)] ?? "" })}
+                              className={cn(actionBtnCls, hasNote ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-primary hover:bg-primary/10")}
+                              title={hasNote ? "Edit note" : "Add note"}>
+                              <MessageSquare className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setWhyUnmatched({ type: "purchase", row })}
+                              className={cn(actionBtnCls, "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10")} title="Why didn't this match?">
+                              <HelpCircle className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => row.id != null && handleDeleteRow("purchase", row.id)} disabled={deletingId === row.id}
+                              className={cn(actionBtnCls, "text-muted-foreground hover:text-destructive hover:bg-destructive/10")} title="Delete">
+                              {deletingId === row.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 {data.purchaseRows.filter((r) => r.status !== "Matched")
                   .filter((r) => matchF(formatDate(r.billDate), pf.billDate) && matchF(formatDate(r.purchaseDate), pf.purchaseDate) && matchF(r.item, pf.item) && matchF(r.qty.toFixed(2), pf.qty) && matchF(r.rate, pf.rate) && matchF(r.amount, pf.amount) && matchF(r.status, pf.status)).length === 0 && (
                   <tr><td colSpan={9} className="px-6 py-10 text-center text-muted-foreground">All purchase records matched</td></tr>
@@ -1283,18 +1769,21 @@ function ResultsView({ data, onDataChange, selectedFY }: {
 
       {/* Modals */}
       <AnimatePresence>
-        {showDeleteByDate && <DeleteByDateModal salesDates={salesDates} purchaseDates={purchaseDates} onClose={() => setShowDeleteByDate(false)} onSuccess={onDataChange} />}
+        {showDeleteByDate && <DeleteByDateModal salesDates={salesDates} purchaseDates={purchaseDates} onClose={() => setShowDeleteByDate(false)} onSuccess={onDataChange} userEmail={userEmail} />}
         {showAddSale && <AddSaleModal onClose={() => setShowAddSale(false)} onSuccess={onDataChange} />}
         {showAddPurchase && <AddPurchaseModal onClose={() => setShowAddPurchase(false)} onSuccess={onDataChange} />}
         {editSaleRow && <EditSaleModal row={editSaleRow} onClose={() => setEditSaleRow(null)} onSuccess={(d) => { onDataChange(d); setEditSaleRow(null); }} />}
         {editPurchaseRow && <EditPurchaseModal row={editPurchaseRow} onClose={() => setEditPurchaseRow(null)} onSuccess={(d) => { onDataChange(d); setEditPurchaseRow(null); }} />}
-        {whyUnmatched && (
-          <WhyUnmatchedModal type={whyUnmatched.type} row={whyUnmatched.row} allData={data} onClose={() => setWhyUnmatched(null)} />
-        )}
+        {whyUnmatched && <WhyUnmatchedModal type={whyUnmatched.type} row={whyUnmatched.row} onClose={() => setWhyUnmatched(null)} />}
         {manualMatchSale && (
           <ManualMatchModal sale={manualMatchSale} allData={data} onClose={() => setManualMatchSale(null)}
             onSuccess={(d) => { onDataChange(d); setManualMatchSale(null); }} />
         )}
+        {noteModal && (
+          <NoteModal purchaseId={noteModal.id} initialNote={noteModal.note} onClose={() => setNoteModal(null)}
+            onSaved={(id, note) => { setNotes((prev) => ({ ...prev, [String(id)]: note })); setNoteModal(null); }} />
+        )}
+        {lotInfoRow && <LotInfoModal row={lotInfoRow} onClose={() => setLotInfoRow(null)} />}
       </AnimatePresence>
     </div>
   );
@@ -1313,7 +1802,7 @@ export default function Dashboard() {
   const [uploadError, setUploadError] = useState("");
   const [showFormatGuide, setShowFormatGuide] = useState(false);
   const [selectedFY, setSelectedFY] = useState<string>(getCurrentFY());
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const availableFYs = getAvailableFYs();
 
   const { data: reportsData, isLoading: reportsLoading, refetch: refetchReports, error: reportsError } = useGetReports({
@@ -1326,7 +1815,7 @@ export default function Dashboard() {
     if (e.status === 401 && e.data?.error === "reauth_required") window.location.href = `${BASE}/api/login`;
   }, [reportsError]);
 
-  useEffect(() => { setSelectedMonth(""); }, [selectedFY]);
+  useEffect(() => { setSelectedMonths([]); }, [selectedFY]);
 
   const [liveReportsData, setLiveReportsData] = useState<ReconciliationResult | null>(null);
 
@@ -1374,12 +1863,11 @@ export default function Dashboard() {
     ...(fyUploadData?.purchaseRows.map((r) => monthKey(r.billDate)) ?? []),
   ])].filter(Boolean).sort();
 
-  const displayReportsData = fyReportsData ? filterResultByMonth(fyReportsData, selectedMonth) : null;
-  const displayUploadResult = fyUploadData ? filterResultByMonth(fyUploadData, selectedMonth) : null;
+  const displayReportsData = fyReportsData ? filterResultByMonths(fyReportsData, selectedMonths) : null;
+  const displayUploadResult = fyUploadData ? filterResultByMonths(fyUploadData, selectedMonths) : null;
 
   return (
     <div className="min-h-screen pb-20">
-      {/* Header */}
       <header className="bg-card/80 backdrop-blur-md border-b border-border sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -1402,14 +1890,7 @@ export default function Dashboard() {
               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 pointer-events-none" />
             </div>
             {availableMonths.length > 0 && (
-              <div className="relative flex items-center">
-                <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="appearance-none bg-muted/50 hover:bg-muted border border-border text-foreground text-sm font-medium pl-3 pr-8 py-2 rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary">
-                  <option value="">All Months</option>
-                  {availableMonths.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 pointer-events-none" />
-              </div>
+              <MultiMonthDropdown months={availableMonths} selected={selectedMonths} onChange={setSelectedMonths} />
             )}
             <button onClick={appMode === "reports" ? () => setAppMode("upload") : handleSwitchToReports}
               className={cn("flex items-center space-x-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors",
@@ -1432,7 +1913,6 @@ export default function Dashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 space-y-8">
         <AnimatePresence mode="wait">
-          {/* ── REPORTS MODE ── */}
           {appMode === "reports" && (
             <motion.div key="reports-mode" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
               {reportsLoading ? (
@@ -1441,7 +1921,7 @@ export default function Dashboard() {
                   <p className="text-muted-foreground">Loading your saved records...</p>
                 </div>
               ) : displayReportsData && (displayReportsData.salesRows.length > 0 || displayReportsData.purchaseRows.length > 0) ? (
-                <ResultsView data={displayReportsData} onDataChange={handleReportsDataChange} selectedFY={selectedFY} />
+                <ResultsView data={displayReportsData} onDataChange={handleReportsDataChange} selectedFY={selectedFY} selectedMonths={selectedMonths} userEmail={user?.email ?? undefined} />
               ) : (
                 <div className="flex flex-col items-center justify-center py-32 space-y-4 text-center">
                   <div className="p-6 bg-muted/50 rounded-full"><FileSpreadsheet className="w-12 h-12 text-muted-foreground" /></div>
@@ -1458,11 +1938,9 @@ export default function Dashboard() {
             </motion.div>
           )}
 
-          {/* ── UPLOAD MODE ── */}
           {appMode === "upload" && (
             <motion.div key="upload-mode" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
               <AnimatePresence>
-                {/* File import results banner */}
                 {fileResults && fileResults.length > 0 && (
                   <motion.div key="file-results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     <FileImportBanner results={fileResults} onClose={() => setFileResults(null)} />
@@ -1493,12 +1971,12 @@ export default function Dashboard() {
                                 <table className="w-full text-xs text-muted-foreground">
                                   <thead><tr className="border-b border-border/50"><th className="text-left py-1 pr-3 font-semibold text-foreground/70">Column Header</th><th className="text-left py-1 font-semibold text-foreground/70">Example</th></tr></thead>
                                   <tbody className="divide-y divide-border/30">
-                                    {[["Sale Date","15/04/2025"],["Item / Commodity","Onion"],["Qty (QTL)","120.50"],["Rate","850"],["Amount","102425"]].map(([col,ex]) => (
+                                    {[["Sale Date","15/04/2025"],["Item / Commodity","Onion"],["Qty (QTL)","120.50"],["Rate","850"],["Amount","102425"],["KP No. (optional)","KP001"],["Farmer Name (optional)","Rajesh Patil"],["Village (optional)","Nashik"]].map(([col,ex]) => (
                                       <tr key={col}><td className="py-1 pr-3 font-medium text-foreground/80">{col}</td><td className="py-1 text-muted-foreground">{ex}</td></tr>
                                     ))}
                                   </tbody>
                                 </table>
-                                <p className="text-[11px] text-muted-foreground/70">Date format: DD/MM/YYYY or YYYY-MM-DD · Amount auto-calculated from Qty × Rate</p>
+                                <p className="text-[11px] text-muted-foreground/70">Date format: DD/MM/YYYY or YYYY-MM-DD · KP No., Farmer Name, Village are optional</p>
                               </div>
                               <div className="rounded-xl border border-border bg-white/5 p-4 space-y-2">
                                 <p className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center space-x-1.5"><FileSpreadsheet className="w-3.5 h-3.5 text-primary" /><span>Purchase Bill — Required Columns</span></p>
@@ -1553,7 +2031,7 @@ export default function Dashboard() {
                         </div>
                       )}
                       <div className="mt-8 flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground">Re-uploading the same date replaces only unmatched records for that date.</p>
+                        <p className="text-xs text-muted-foreground">Re-uploading the same date + commodity replaces only those records.</p>
                         <button onClick={handleRun} disabled={isRunDisabled}
                           className="flex items-center space-x-2 px-8 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md active:scale-[0.98]">
                           {uploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>Processing...</span></> : <><ArrowRightLeft className="w-5 h-5" /><span>Run Match</span></>}
@@ -1566,7 +2044,7 @@ export default function Dashboard() {
 
               {uploadResult && displayUploadResult && (
                 <motion.div key="result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                  <ResultsView data={displayUploadResult} onDataChange={setUploadResult} selectedFY={selectedFY} />
+                  <ResultsView data={displayUploadResult} onDataChange={setUploadResult} selectedFY={selectedFY} selectedMonths={selectedMonths} userEmail={user?.email ?? undefined} />
                 </motion.div>
               )}
             </motion.div>

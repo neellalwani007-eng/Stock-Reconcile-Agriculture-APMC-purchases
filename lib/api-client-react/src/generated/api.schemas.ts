@@ -48,6 +48,9 @@ export interface ManualSaleInput {
   qty: number;
   rate: number;
   amount: number;
+  kpNo?: string | null;
+  farmerName?: string | null;
+  village?: string | null;
 }
 
 export interface ManualPurchaseInput {
@@ -89,6 +92,9 @@ export interface SaleRow {
   amount: number;
   purchaseBillDate?: string | null;
   status: SaleRowStatus;
+  kpNo?: string | null;
+  farmerName?: string | null;
+  village?: string | null;
 }
 
 export type PurchaseRowStatus =

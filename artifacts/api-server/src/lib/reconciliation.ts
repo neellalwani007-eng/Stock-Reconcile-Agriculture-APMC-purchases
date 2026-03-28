@@ -9,6 +9,9 @@ export interface SaleRow {
   amount: number;
   purchaseBillDate: string | null;
   status: "Matched" | "Pending";
+  kpNo?: string;
+  farmerName?: string;
+  village?: string;
 }
 
 export interface PurchaseRow {
@@ -112,6 +115,11 @@ function findCol(hm: Record<string, number>, ...candidates: string[]): number {
   return -1;
 }
 
+function optStr(r: unknown[], col: number): string | undefined {
+  if (col === -1 || r[col] == null || String(r[col]).trim() === "") return undefined;
+  return String(r[col]).trim();
+}
+
 export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: false });
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -124,6 +132,9 @@ export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
   const qtycol = findCol(hm, "qty", "quantity", "qtl", "qty (qtl)");
   const ratecol = findCol(hm, "rate", "price");
   const amtcol = findCol(hm, "amount", "amt", "total");
+  const kpNoCol = findCol(hm, "kp no.", "kp no", "kp no.", "kpno", "kp");
+  const farmerCol = findCol(hm, "farmer name", "farmer", "grower name", "grower");
+  const villageCol = findCol(hm, "village", "vill", "location", "village name");
 
   const rows: Omit<SaleRow, "id">[] = [];
   for (let i = 1; i < raw.length; i++) {
@@ -141,6 +152,9 @@ export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
       amount: normalizeNum(r[amtcol]),
       purchaseBillDate: null,
       status: "Pending",
+      kpNo: optStr(r, kpNoCol),
+      farmerName: optStr(r, farmerCol),
+      village: optStr(r, villageCol),
     });
   }
   return rows;
@@ -155,7 +169,6 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
   const hm = headerMap(raw[0] as unknown[]);
   const billdatecol = findCol(hm, "date", "bill date", "billdate", "payment date");
   const purdatecol = findCol(hm, "purchase date", "purchasedate", "original purchase date", "orig date");
-  // If no separate purchase date column exists, fall back to bill date column
   const effectivePurDateCol = purdatecol !== -1 ? purdatecol : billdatecol;
   const itemcol = findCol(hm, "item", "commodity", "product", "name");
   const qtycol = findCol(hm, "qty", "quantity", "qtl", "qty (qtl)");
@@ -195,12 +208,6 @@ function lotsMatch(
   return true;
 }
 
-/**
- * Run 1-to-1 matching between pending sales and unmatched purchases.
- * Qty and Rate must match exactly; Amount may differ by up to ±0.2.
- * Returns a list of match pairs (saleId, purchaseId, purchaseBillDate).
- * Mutates salesRows and purchaseRows in-place to update status/purchaseBillDate.
- */
 export function runMatching(
   salesRows: SaleRow[],
   purchaseRows: PurchaseRow[]
@@ -278,8 +285,12 @@ export function buildResult(salesRows: SaleRow[], purchaseRows: PurchaseRow[]): 
 export function buildUpdatedSalesExcel(result: ReconciliationResult): Buffer {
   const wb = XLSX.utils.book_new();
   const data = [
-    ["Sale Date", "Item", "Qty (QTL)", "Rate", "Amount", "Purchase Bill Date", "Status"],
-    ...result.salesRows.map((r) => [r.saleDate, r.item, r.qty, r.rate, r.amount, r.purchaseBillDate ?? "", r.status]),
+    ["Sale Date", "Item", "Qty (QTL)", "Rate", "Amount", "KP No.", "Farmer Name", "Village", "Purchase Bill Date", "Status"],
+    ...result.salesRows.map((r) => [
+      r.saleDate, r.item, r.qty, r.rate, r.amount,
+      r.kpNo ?? "", r.farmerName ?? "", r.village ?? "",
+      r.purchaseBillDate ?? "", r.status,
+    ]),
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Updated Sales");
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
@@ -289,8 +300,11 @@ export function buildPendingPavatiExcel(result: ReconciliationResult): Buffer {
   const wb = XLSX.utils.book_new();
   const pending = result.salesRows.filter((r) => r.status === "Pending");
   const data = [
-    ["Sale Date", "Commodity", "Quantity (QTL)", "Rate", "Amount"],
-    ...pending.map((r) => [r.saleDate, r.item, r.qty, r.rate, r.amount]),
+    ["Sale Date", "Commodity", "Quantity (QTL)", "Rate", "Amount", "KP No.", "Farmer Name", "Village"],
+    ...pending.map((r) => [
+      r.saleDate, r.item, r.qty, r.rate, r.amount,
+      r.kpNo ?? "", r.farmerName ?? "", r.village ?? "",
+    ]),
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Pending Pavati");
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
@@ -307,12 +321,18 @@ export function buildDatewiseReportExcel(result: ReconciliationResult): Buffer {
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
 }
 
-export function buildPurchaseExceptionsExcel(result: ReconciliationResult): Buffer {
+export function buildPurchaseExceptionsExcel(
+  result: ReconciliationResult,
+  notes: Record<string, string> = {},
+): Buffer {
   const wb = XLSX.utils.book_new();
   const exceptions = result.purchaseRows.filter((r) => r.status !== "Matched");
   const data = [
-    ["Bill Date", "Purchase Date", "Commodity", "Qty (QTL)", "Rate", "Amount", "Status"],
-    ...exceptions.map((r) => [r.billDate, r.purchaseDate, r.item, r.qty, r.rate, r.amount, r.status]),
+    ["Bill Date", "Purchase Date", "Commodity", "Qty (QTL)", "Rate", "Amount", "Status", "Note"],
+    ...exceptions.map((r) => [
+      r.billDate, r.purchaseDate, r.item, r.qty, r.rate, r.amount, r.status,
+      notes[String(r.id)] ?? "",
+    ]),
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Purchase Exceptions");
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
@@ -330,15 +350,6 @@ function sortedUniq(arr: string[]): string[] {
   return [...new Set(arr)].sort();
 }
 
-/**
- * Build the monthly matrix workbook (Qty or Amount).
- *
- * Sheet per month+commodity.
- * Row A = sale dates of this month + carry-forward pending sale dates from prior months (as extra rows at top).
- * Col 1 = bill dates of this month (matching column).
- * Cell = sum of matched qty/amount for that saleDate × billDate pair.
- * Extra cols: Total | Op Pay | Bill Qty | Pending Pay
- */
 export function buildMonthlyMatrixExcel(
   result: ReconciliationResult,
   mode: "qty" | "amount",
@@ -346,7 +357,6 @@ export function buildMonthlyMatrixExcel(
 ): Buffer {
   const wb = XLSX.utils.book_new();
 
-  // Filter to FY
   function getFY(dateStr: string): string {
     const d = new Date(dateStr);
     const mo = d.getMonth() + 1;
@@ -356,19 +366,16 @@ export function buildMonthlyMatrixExcel(
   const sales = result.salesRows.filter((r) => getFY(r.saleDate) === fy);
   const purchases = result.purchaseRows.filter((r) => getFY(r.billDate) === fy);
 
-  // All commodities
   const items = sortedUniq([
     ...sales.map((r) => r.item),
     ...purchases.map((r) => r.item),
   ]);
 
-  // All months in FY (Apr..Mar)
   const allMonths = sortedUniq([
     ...sales.map((r) => monthOf(r.saleDate)),
     ...purchases.map((r) => monthOf(r.billDate)),
   ]);
 
-  // month label helper
   const MNAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   function monthLabel(ym: string): string {
     const [y, m] = ym.split("-");
@@ -379,11 +386,7 @@ export function buildMonthlyMatrixExcel(
     const itemSales = sales.filter((r) => r.item === item);
     const itemPurchases = purchases.filter((r) => r.item === item);
 
-    // Build a lookup: saleId -> sale
-    // Build match pairs: each matched sale knows its billDate and saleDate
-    // We need: for each (saleDate, billDate) -> sum of qty/amount
-
-    type CellKey = string; // `${saleDate}|${billDate}`
+    type CellKey = string;
     const cellMap = new Map<CellKey, number>();
     for (const s of itemSales) {
       if (s.status === "Matched" && s.purchaseBillDate) {
@@ -393,44 +396,31 @@ export function buildMonthlyMatrixExcel(
     }
 
     for (const monthKey of allMonths) {
-      // Bill dates (purchase bill dates) in this month
       const billDates = sortedUniq(
         itemPurchases
           .filter((r) => monthOf(r.billDate) === monthKey)
           .map((r) => r.billDate),
       );
 
-      // Sale dates in this month
       const thisMonthSaleDates = sortedUniq(
         itemSales
           .filter((r) => monthOf(r.saleDate) === monthKey)
           .map((r) => r.saleDate),
       );
 
-      // ── Carry-forward rows ──────────────────────────────────────────────────
-      // A prior-month sale date should appear in THIS month's sheet if:
-      //   (a) The sale is still Pending (unmatched), OR
-      //   (b) The sale was Matched to a bill dated in THIS month
-      //       (it was "pending" at the start of this month, now settled)
-      //
-      // opPay for each carry-forward date = qty/amount that was pending at the
-      // START of this month = (a) currently still pending + (b) just matched
-      // to this month's bill.
-      const cfMap = new Map<string, number>(); // saleDate -> opPay value
+      const cfMap = new Map<string, number>();
 
       for (const s of itemSales) {
-        if (monthOf(s.saleDate) >= monthKey) continue; // only prior months
+        if (monthOf(s.saleDate) >= monthKey) continue;
         const val = mode === "qty" ? s.qty : s.amount;
 
         if (s.status === "Pending") {
-          // Still unmatched — was pending before this month AND still is
           cfMap.set(s.saleDate, (cfMap.get(s.saleDate) ?? 0) + val);
         } else if (
           s.status === "Matched" &&
           s.purchaseBillDate &&
           monthOf(s.purchaseBillDate) === monthKey
         ) {
-          // Matched to THIS month's bill — was pending before, cleared now
           cfMap.set(s.saleDate, (cfMap.get(s.saleDate) ?? 0) + val);
         }
       }
@@ -443,19 +433,16 @@ export function buildMonthlyMatrixExcel(
           opPay: cfMap.get(sd) ?? 0,
         }));
 
-      // All rows = carry-forward (prior pending/settled) + this month's sale dates
       const cfSdSet = new Set(carryForwardSaleDates);
       const rowSaleDates: { label: string; saleDate: string; opPay: number }[] = [
         ...carryForwardRows,
         ...thisMonthSaleDates
-          .filter((sd) => !cfSdSet.has(sd)) // avoid duplicates
+          .filter((sd) => !cfSdSet.has(sd))
           .map((sd) => ({ label: fmtDate(sd), saleDate: sd, opPay: 0 })),
       ];
 
       if (rowSaleDates.length === 0 && billDates.length === 0) continue;
 
-      // Build the AOA (array of arrays)
-      // Row 0: header — "Date" | bill dates | "Total" | "Op Pay" | "Bill Qty" | "Pending Pay"
       const header: (string | number)[] = [
         "Date",
         ...billDates.map(fmtDate),
@@ -475,16 +462,12 @@ export function buildMonthlyMatrixExcel(
       for (const { label, saleDate, opPay } of rowSaleDates) {
         const isCarryForward = cfSdSet.has(saleDate);
 
-        // Bill Qty:
-        //   carry-forward rows → opPay (the pending opening balance for this month)
-        //   this month's rows  → total sales qty/amount on this date
         const billQty = isCarryForward
           ? opPay
           : itemSales
               .filter((r) => r.saleDate === saleDate)
               .reduce((a, r) => a + (mode === "qty" ? r.qty : r.amount), 0);
 
-        // Matched values per bill date column
         const rowValues: number[] = billDates.map((bd) => {
           const key: CellKey = `${saleDate}|${bd}`;
           return cellMap.get(key) ?? 0;
@@ -492,9 +475,6 @@ export function buildMonthlyMatrixExcel(
 
         const rowTotal = rowValues.reduce((a, v) => a + v, 0);
 
-        // Pending Pay — only what is still unpaid at end of this month:
-        //   carry-forward rows: Op Pay  − Total  (opening balance minus what was settled this month)
-        //   current month rows: Bill Qty − Total  (total sales minus what was matched this month)
         const pendingPay = isCarryForward
           ? Math.max(0, opPay - rowTotal)
           : Math.max(0, billQty - rowTotal);
@@ -516,7 +496,6 @@ export function buildMonthlyMatrixExcel(
         pendingPayTotal += pendingPay;
       }
 
-      // Total row
       const totalRow: (string | number)[] = [
         "Total",
         ...colTotals.map((v) => (v > 0 ? v : "")),
@@ -530,12 +509,9 @@ export function buildMonthlyMatrixExcel(
       const sheetName = `${monthLabel(monthKey)} - ${item}`.slice(0, 31);
       const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-      // Style: bold header row and total row
       const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
-      // Set column widths
       ws["!cols"] = [{ wch: 14 }, ...billDates.map(() => ({ wch: 12 })), { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
 
-      // Bold header and totals
       for (let C = range.s.c; C <= range.e.c; C++) {
         const hCell = XLSX.utils.encode_cell({ r: 0, c: C });
         const tCell = XLSX.utils.encode_cell({ r: aoa.length - 1, c: C });
