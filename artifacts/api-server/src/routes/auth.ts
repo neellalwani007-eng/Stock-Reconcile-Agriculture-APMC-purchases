@@ -53,13 +53,14 @@ async function upsertUser(userInfo: {
   family_name?: string | null;
   name?: string | null;
   picture?: string | null;
-}) {
+}, refreshToken?: string | null) {
   const userData = {
     id: userInfo.id as string,
     email: userInfo.email ?? null,
     firstName: userInfo.given_name ?? userInfo.name?.split(" ")[0] ?? null,
     lastName: userInfo.family_name ?? userInfo.name?.split(" ").slice(1).join(" ") ?? null,
     profileImageUrl: userInfo.picture ?? null,
+    ...(refreshToken ? { googleRefreshToken: refreshToken } : {}),
   };
 
   // Remove any stale rows that share the same email but a different id
@@ -100,7 +101,7 @@ router.get("/login", (req: Request, res: Response) => {
 
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
-    prompt: "consent select_account",
+    prompt: "select_account",
     scope: [
       "openid",
       "email",
@@ -147,7 +148,13 @@ router.get("/callback", async (req: Request, res: Response) => {
       return;
     }
 
-    const dbUser = await upsertUser(userInfo);
+    // Save refresh token to DB if Google returned one; otherwise reuse stored one
+    const dbUser = await upsertUser(userInfo, tokens.refresh_token ?? null);
+
+    // If Google didn't return a refresh token (re-login without consent prompt),
+    // use the one we stored from the first login so token refresh keeps working.
+    const effectiveRefreshToken =
+      tokens.refresh_token ?? dbUser.googleRefreshToken ?? undefined;
 
     const now = Math.floor(Date.now() / 1000);
     const sessionData: SessionData = {
@@ -159,7 +166,7 @@ router.get("/callback", async (req: Request, res: Response) => {
         profileImageUrl: dbUser.profileImageUrl,
       },
       access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token ?? undefined,
+      refresh_token: effectiveRefreshToken,
       expires_at: tokens.expiry_date
         ? Math.floor(tokens.expiry_date / 1000)
         : now + 3600,
