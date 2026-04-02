@@ -374,7 +374,21 @@ export function buildMonthlyMatrixExcel(
     return mo >= 4 ? `${yr}-${String(yr + 1).slice(-2)}` : `${yr - 1}-${String(yr).slice(-2)}`;
   }
   const sales = result.salesRows.filter((r) => getFY(r.saleDate) === fy);
-  const purchases = result.purchaseRows.filter((r) => getFY(r.billDate) === fy);
+
+  // Standard purchases for this FY (bill date falls in this FY)
+  const thisYearPurchases = result.purchaseRows.filter((r) => getFY(r.billDate) === fy);
+
+  // Cross-FY: purchases whose bill date is in a DIFFERENT FY but that matched a sale
+  // whose sale date IS in this FY.  This lets a Mar-2026 pending sale that was settled
+  // by an Apr-2026 bill (FY 2026-27) appear correctly in the FY 2025-26 matrix.
+  const crossFYBillDates = new Set(
+    sales
+      .filter((s) => s.status === "Matched" && s.purchaseBillDate && getFY(s.purchaseBillDate) !== fy)
+      .map((s) => s.purchaseBillDate!),
+  );
+  const crossFYPurchases = result.purchaseRows.filter((r) => crossFYBillDates.has(r.billDate));
+
+  const purchases = [...thisYearPurchases, ...crossFYPurchases];
 
   // Group items by normalised key so different casings / Unicode forms merge correctly
   const itemNormMap = new Map<string, string>(); // normKey → display name
