@@ -214,25 +214,43 @@ export function runMatching(
   salesRows: SaleRow[],
   purchaseRows: PurchaseRow[]
 ): { updates: MatchUpdate[] } {
-  const purchaseUsed = new Set<number>();
   const updates: MatchUpdate[] = [];
 
+  // --- Phase 1: pre-normalize item strings once per purchase (avoids re-computing
+  //     normalizeStr inside the inner loop for every sale × purchase pair).
+  const purItemNorms = purchaseRows.map((p) => normalizeStr(p.item));
+
+  // --- Phase 2: build an index  "normalizedItem|purchaseDate" → ordered list of
+  //     purchase indices.  Direct lookup replaces the full O(n×m) scan — for each
+  //     sale we only visit purchases that share the same item AND date.
+  const purchaseIndex = new Map<string, number[]>();
+  for (let pi = 0; pi < purchaseRows.length; pi++) {
+    if (purchaseRows[pi].status === "Matched") continue;
+    const key = `${purItemNorms[pi]}|${purchaseRows[pi].purchaseDate}`;
+    const bucket = purchaseIndex.get(key);
+    if (bucket) bucket.push(pi);
+    else purchaseIndex.set(key, [pi]);
+  }
+
+  // --- Phase 3: match sales against the index.
   for (const sale of salesRows) {
     if (sale.status === "Matched") continue;
-    const saleItemNorm = normalizeStr(sale.item);
+    const key = `${normalizeStr(sale.item)}|${sale.saleDate}`;
+    const candidates = purchaseIndex.get(key);
+    if (!candidates || candidates.length === 0) continue;
 
-    for (let pi = 0; pi < purchaseRows.length; pi++) {
-      if (purchaseUsed.has(pi)) continue;
+    for (let ci = 0; ci < candidates.length; ci++) {
+      const pi = candidates[ci];
       const pur = purchaseRows[pi];
-      if (pur.status === "Matched") continue;
-      if (normalizeStr(pur.item) !== saleItemNorm) continue;
-      if (pur.purchaseDate !== sale.saleDate) continue;
       if (!lotsMatch(sale.qty, sale.rate, sale.amount, pur.qty, pur.rate, pur.amount)) continue;
 
+      // Match found — update both rows.
       sale.purchaseBillDate = pur.billDate;
       sale.status = "Matched";
       purchaseRows[pi].status = "Matched";
-      purchaseUsed.add(pi);
+
+      // Remove from index so this purchase can never be matched again.
+      candidates.splice(ci, 1);
 
       if (sale.id !== undefined && pur.id !== undefined) {
         updates.push({ saleId: sale.id, purchaseId: pur.id, purchaseBillDate: pur.billDate });
