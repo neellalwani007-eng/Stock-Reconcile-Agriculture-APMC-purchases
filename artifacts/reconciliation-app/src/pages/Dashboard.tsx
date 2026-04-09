@@ -19,7 +19,6 @@ import { formatCurrency, formatDate, cn } from "@/lib/utils";
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 type AppMode = "upload" | "reports";
-type UploadMode = "both" | "sale-only" | "purchase-only";
 
 interface FileImportResult {
   filename: string;
@@ -1793,7 +1792,6 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const [appMode, setAppMode] = useState<AppMode>("upload");
-  const [uploadMode, setUploadMode] = useState<UploadMode>("both");
   const [salesFiles, setSalesFiles] = useState<File[]>([]);
   const [purchaseFiles, setPurchaseFiles] = useState<File[]>([]);
   const [uploadResult, setUploadResult] = useState<ReconciliationResult | null>(null);
@@ -1820,15 +1818,13 @@ export default function Dashboard() {
   const [liveReportsData, setLiveReportsData] = useState<ReconciliationResult | null>(null);
 
   const handleRun = async () => {
-    if (uploadMode === "both" && (salesFiles.length === 0 || purchaseFiles.length === 0)) return;
-    if (uploadMode === "sale-only" && salesFiles.length === 0) return;
-    if (uploadMode === "purchase-only" && purchaseFiles.length === 0) return;
+    if (salesFiles.length === 0 && purchaseFiles.length === 0) return;
 
     setUploadError(""); setUploading(true); setFileResults(null);
     try {
       const formData = new FormData();
-      if (uploadMode !== "purchase-only") salesFiles.forEach((f) => formData.append("salesFile", f));
-      if (uploadMode !== "sale-only") purchaseFiles.forEach((f) => formData.append("purchaseFile", f));
+      salesFiles.forEach((f) => formData.append("salesFile", f));
+      purchaseFiles.forEach((f) => formData.append("purchaseFile", f));
 
       const res = await fetch(`${BASE}/api/reconciliation/run`, { method: "POST", credentials: "include", body: formData });
       const data = await res.json();
@@ -1846,10 +1842,7 @@ export default function Dashboard() {
   const handleSwitchToReports = () => { setAppMode("reports"); setLiveReportsData(null); refetchReports(); };
   const handleReportsDataChange = (data: ReconciliationResult) => setLiveReportsData(data);
 
-  const isRunDisabled = uploading ||
-    (uploadMode === "both" && (salesFiles.length === 0 || purchaseFiles.length === 0)) ||
-    (uploadMode === "sale-only" && salesFiles.length === 0) ||
-    (uploadMode === "purchase-only" && purchaseFiles.length === 0);
+  const isRunDisabled = uploading || (salesFiles.length === 0 && purchaseFiles.length === 0);
 
   const displayName = user?.firstName || user?.email?.split("@")[0] || "User";
   const rawReportsData = liveReportsData ?? reportsData;
@@ -1954,9 +1947,6 @@ export default function Dashboard() {
                       <h2 className="text-xl font-display font-bold text-foreground flex items-center space-x-2">
                         <LayoutDashboard className="w-6 h-6 text-primary" /><span>Upload & Match</span>
                       </h2>
-                      <p className="text-muted-foreground mt-1 text-sm">
-                        Upload one or both files. Matching runs automatically against <strong>all your saved records</strong>.
-                      </p>
                       <button onClick={() => setShowFormatGuide((v) => !v)}
                         className="mt-3 flex items-center space-x-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
                         <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", showFormatGuide && "rotate-180")} />
@@ -1997,32 +1987,15 @@ export default function Dashboard() {
                     </div>
 
                     <div className="p-6 md:p-8">
-                      <div className="flex rounded-xl overflow-hidden border border-border mb-8 w-fit">
-                        {(["both","sale-only","purchase-only"] as UploadMode[]).map((mode, i) => (
-                          <button key={mode} onClick={() => { setUploadMode(mode); if(mode==="sale-only") setPurchaseFiles([]); if(mode==="purchase-only") setSalesFiles([]); }}
-                            className={cn("px-5 py-2.5 text-sm font-medium transition-colors", i > 0 && "border-l border-border",
-                              uploadMode === mode ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground")}>
-                            {mode === "both" ? "Sales + Purchase" : mode === "sale-only" ? "Sales Only" : "Purchase Only"}
-                          </button>
-                        ))}
-                      </div>
-                      <div className={cn("grid gap-8", uploadMode === "both" ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 max-w-lg")}>
-                        {uploadMode !== "purchase-only" && (
-                          <div className="space-y-3">
-                            <label className="text-sm font-semibold text-foreground flex justify-between">
-                              <span>Sales Data</span>{uploadMode === "both" && <span className="text-muted-foreground font-normal">Step 1</span>}
-                            </label>
-                            <FileDropzone label="Sales Excel" files={salesFiles} onFilesChange={setSalesFiles} />
-                          </div>
-                        )}
-                        {uploadMode !== "sale-only" && (
-                          <div className="space-y-3">
-                            <label className="text-sm font-semibold text-foreground flex justify-between">
-                              <span>Purchase Data</span>{uploadMode === "both" && <span className="text-muted-foreground font-normal">Step 2</span>}
-                            </label>
-                            <FileDropzone label="Purchase Excel" files={purchaseFiles} onFilesChange={setPurchaseFiles} />
-                          </div>
-                        )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-3">
+                          <label className="text-sm font-semibold text-foreground">Sales Data</label>
+                          <FileDropzone label="Sales Excel" files={salesFiles} onFilesChange={setSalesFiles} />
+                        </div>
+                        <div className="space-y-3">
+                          <label className="text-sm font-semibold text-foreground">Purchase Data</label>
+                          <FileDropzone label="Purchase Excel" files={purchaseFiles} onFilesChange={setPurchaseFiles} />
+                        </div>
                       </div>
                       {uploadError && (
                         <div className="mt-6 p-4 bg-destructive/10 border border-destructive/20 rounded-xl flex items-start space-x-3">
