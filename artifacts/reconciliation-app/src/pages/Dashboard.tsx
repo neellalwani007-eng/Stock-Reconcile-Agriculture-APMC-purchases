@@ -214,7 +214,7 @@ function FileImportBanner({ results, onClose }: { results: FileImportResult[]; o
               <p className="text-sm font-medium text-foreground truncate">{r.filename}</p>
               <p className="text-xs text-muted-foreground">{r.type === "sale" ? "Sales" : "Purchase"} · {r.rowCount} row{r.rowCount !== 1 ? "s" : ""} imported</p>
             </div>
-            <span className="text-xs font-semibold text-green-400 shrink-0 mt-0.5">{r.rowCount}r</span>
+            <span className="text-xs font-semibold text-green-400 shrink-0 mt-0.5">{r.rowCount} rows</span>
           </div>
         ))}
         {failed.map((r, i) => (
