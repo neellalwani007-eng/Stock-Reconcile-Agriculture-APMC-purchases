@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -37,6 +38,7 @@ const features = [
 
 function LoginPage() {
   const { login } = useAuth();
+  const [agreed, setAgreed] = useState(false);
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-between py-10 sm:py-20 px-4 sm:px-6 relative overflow-hidden"
@@ -86,9 +88,59 @@ function LoginPage() {
         <div className="absolute inset-0 rounded-2xl bg-emerald-500/20 blur-2xl scale-105 -z-10" />
         <div className="bg-white/10 backdrop-blur-xl border border-emerald-400/30 rounded-2xl p-8 shadow-2xl">
           <h2 className="text-white text-lg font-semibold mb-5 text-center">Sign in to continue</h2>
+          <label className="flex items-start gap-3 mb-5 cursor-pointer group">
+            <div className="relative mt-0.5 flex-shrink-0">
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+              />
+              <div
+                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-150 ${
+                  agreed
+                    ? "bg-emerald-500 border-emerald-500"
+                    : "bg-white/10 border-white/30 group-hover:border-emerald-400/60"
+                }`}
+              >
+                {agreed && (
+                  <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none">
+                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </div>
+            </div>
+            <span className="text-white/60 text-xs leading-relaxed">
+              I agree to the{" "}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Terms &amp; Conditions
+              </a>{" "}
+              and{" "}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Privacy Policy
+              </a>
+            </span>
+          </label>
           <button
-            onClick={login}
-            className="w-full bg-white text-gray-800 rounded-xl px-5 py-3 text-sm font-semibold flex items-center justify-center gap-3 hover:bg-gray-100 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] transition-all duration-150 shadow-sm"
+            onClick={agreed ? login : undefined}
+            disabled={!agreed}
+            className={`w-full bg-white text-gray-800 rounded-xl px-5 py-3 text-sm font-semibold flex items-center justify-center gap-3 shadow-sm transition-all duration-150 ${
+              agreed
+                ? "hover:bg-gray-100 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] cursor-pointer"
+                : "opacity-40 cursor-not-allowed"
+            }`}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
