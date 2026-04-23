@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { parseSalesPdf, parsePurchasePdf } from "./pdf-parser.js";
 
 export interface SaleRow {
   id?: number;
@@ -579,4 +580,20 @@ export function buildMonthlyMatrixExcel(
   }
 
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+}
+
+export async function parseSalesBuffer(
+  buffer: Buffer,
+  mimetype: string
+): Promise<Omit<SaleRow, "id">[]> {
+  if (mimetype === "application/pdf") return parseSalesPdf(buffer);
+  return parseSalesSheet(buffer);
+}
+
+export async function parsePurchaseBuffer(
+  buffer: Buffer,
+  mimetype: string
+): Promise<Omit<PurchaseRow, "id">[]> {
+  if (mimetype === "application/pdf") return parsePurchasePdf(buffer);
+  return parsePurchaseSheet(buffer);
 }

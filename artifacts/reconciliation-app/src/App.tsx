@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@workspace/replit-auth-web";
 import Dashboard from "@/pages/Dashboard";
 import NotFound from "@/pages/not-found";
-import { ArrowRightLeft, Loader2, CheckCircle2, Lock, FileSpreadsheet } from "lucide-react";
+import { ArrowRightLeft, Loader2, CheckCircle2, Lock, FileSpreadsheet, ArrowLeft, ShieldCheck } from "lucide-react";
 import AdminPage from "@/pages/AdminPage";
 
 const queryClient = new QueryClient({
@@ -36,9 +36,25 @@ const features = [
   },
 ];
 
+const terms = [
+  {
+    title: "Your data is private",
+    body: "Uploaded files are accessible only to your account. We never share or sell your data.",
+  },
+  {
+    title: "Subscription terms",
+    body: "Licences auto-renew. You may cancel before the renewal date for a full stop; no partial refunds.",
+  },
+  {
+    title: "No liability for errors",
+    body: "Reconciliation output is a tool to assist — always verify results before financial decisions.",
+  },
+];
+
 function LoginPage() {
   const { login } = useAuth();
-  const [agreed, setAgreed] = useState(false);
+  const [step, setStep] = useState<"login" | "terms">("login");
+
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-between py-10 sm:py-20 px-4 sm:px-6 relative overflow-hidden"
@@ -55,7 +71,6 @@ function LoginPage() {
 
       {/* Top — logo & tagline */}
       <div className="flex flex-col items-center text-center z-10">
-        {/* Glow ring around logo */}
         <div className="relative mb-6">
           <div className="absolute inset-0 rounded-2xl bg-emerald-400/30 blur-xl scale-110" />
           <div className="relative w-20 h-20 bg-white/15 border border-white/25 rounded-2xl flex items-center justify-center shadow-lg">
@@ -63,9 +78,7 @@ function LoginPage() {
           </div>
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-3 tracking-tight">Stock Reconciler</h1>
-        <p className="text-white/60 text-sm max-w-[260px]">
-          Automate reconciliation in seconds
-        </p>
+        <p className="text-white/60 text-sm max-w-[260px]">Automate reconciliation in seconds</p>
       </div>
 
       {/* Middle — feature cards */}
@@ -82,65 +95,20 @@ function LoginPage() {
         ))}
       </div>
 
-      {/* Bottom — glass login card with soft glow */}
+      {/* Bottom — two-step card */}
       <div className="relative z-10 w-full max-w-sm">
-        {/* Soft glow behind card */}
         <div className="absolute inset-0 rounded-2xl bg-emerald-500/20 blur-2xl scale-105 -z-10" />
-        <div className="bg-white/10 backdrop-blur-xl border border-emerald-400/30 rounded-2xl p-8 shadow-2xl">
+
+        {/* Step 1 — Google button */}
+        <div
+          className={`bg-white/10 backdrop-blur-xl border border-emerald-400/30 rounded-2xl p-8 shadow-2xl transition-all duration-300 ${
+            step === "login" ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none absolute inset-0"
+          }`}
+        >
           <h2 className="text-white text-lg font-semibold mb-5 text-center">Sign in to continue</h2>
-          <label className="flex items-start gap-3 mb-5 cursor-pointer group">
-            <div className="relative mt-0.5 flex-shrink-0">
-              <input
-                type="checkbox"
-                className="sr-only"
-                checked={agreed}
-                onChange={(e) => setAgreed(e.target.checked)}
-              />
-              <div
-                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-150 ${
-                  agreed
-                    ? "bg-emerald-500 border-emerald-500"
-                    : "bg-white/10 border-white/30 group-hover:border-emerald-400/60"
-                }`}
-              >
-                {agreed && (
-                  <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none">
-                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </div>
-            </div>
-            <span className="text-white/60 text-xs leading-relaxed">
-              I agree to the{" "}
-              <a
-                href="/terms"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 transition-colors"
-                onClick={(e) => e.stopPropagation()}
-              >
-                Terms &amp; Conditions
-              </a>{" "}
-              and{" "}
-              <a
-                href="/terms"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 transition-colors"
-                onClick={(e) => e.stopPropagation()}
-              >
-                Privacy Policy
-              </a>
-            </span>
-          </label>
           <button
-            onClick={agreed ? login : undefined}
-            disabled={!agreed}
-            className={`w-full bg-white text-gray-800 rounded-xl px-5 py-3 text-sm font-semibold flex items-center justify-center gap-3 shadow-sm transition-all duration-150 ${
-              agreed
-                ? "hover:bg-gray-100 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] cursor-pointer"
-                : "opacity-40 cursor-not-allowed"
-            }`}
+            onClick={() => setStep("terms")}
+            className="w-full bg-white text-gray-800 rounded-xl px-5 py-3 text-sm font-semibold flex items-center justify-center gap-3 hover:bg-gray-100 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] transition-all duration-150 shadow-sm cursor-pointer"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -154,6 +122,59 @@ function LoginPage() {
           <p className="text-white/40 text-xs text-center mt-4">
             Your data is private, secure, and synced across devices
           </p>
+        </div>
+
+        {/* Step 2 — Terms review */}
+        <div
+          className={`bg-white/10 backdrop-blur-xl border border-emerald-400/30 rounded-2xl p-6 shadow-2xl transition-all duration-300 ${
+            step === "terms" ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none absolute inset-0"
+          }`}
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={() => setStep("login")}
+              className="text-white/40 hover:text-white/70 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <h2 className="text-white text-sm font-semibold">Before you continue</h2>
+            </div>
+          </div>
+
+          <div className="space-y-3 mb-5">
+            {terms.map((term) => (
+              <div key={term.title} className="bg-white/5 border border-white/10 rounded-xl px-4 py-3">
+                <p className="text-emerald-400 text-[11px] font-semibold mb-1">{term.title}</p>
+                <p className="text-white/55 text-[11px] leading-relaxed">{term.body}</p>
+              </div>
+            ))}
+          </div>
+
+          <a
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-white/30 text-[10px] underline underline-offset-2 block text-center mb-4 hover:text-white/50 transition-colors"
+          >
+            Read full Terms &amp; Conditions and Privacy Policy
+          </a>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setStep("login")}
+              className="flex-1 border border-white/20 text-white/60 rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-white/5 transition-all duration-150"
+            >
+              Decline
+            </button>
+            <button
+              onClick={login}
+              className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold bg-emerald-500 text-white hover:bg-emerald-400 active:scale-[0.98] transition-all duration-150"
+            >
+              Accept &amp; Sign in
+            </button>
+          </div>
         </div>
       </div>
     </div>

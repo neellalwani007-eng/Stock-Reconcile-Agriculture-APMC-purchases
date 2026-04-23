@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { UploadCloud, FileSpreadsheet, X, Plus } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, FileText, X, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface FileDropzoneProps {
@@ -17,6 +17,7 @@ export function FileDropzone({
   accept = {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
     'application/vnd.ms-excel': ['.xls'],
+    'application/pdf': ['.pdf'],
   },
 }: FileDropzoneProps) {
 
@@ -47,7 +48,9 @@ export function FileDropzone({
             <div key={i} className="flex items-center justify-between p-3 bg-primary/5 border border-primary/20 rounded-xl">
               <div className="flex items-center space-x-3 overflow-hidden">
                 <div className="p-1.5 bg-primary/10 text-primary rounded-lg shrink-0">
-                  <FileSpreadsheet className="w-4 h-4" />
+                  {file.type === 'application/pdf'
+                    ? <FileText className="w-4 h-4" />
+                    : <FileSpreadsheet className="w-4 h-4" />}
                 </div>
                 <div className="truncate">
                   <p className="text-sm font-medium text-foreground truncate">{file.name}</p>
@@ -93,7 +96,7 @@ export function FileDropzone({
             {isDragActive ? "Drop files here" : `Click or drag to upload ${label}`}
           </p>
           <p className="text-xs text-muted-foreground text-center">
-            Supports .xlsx and .xls — multiple files allowed
+            Supports .xlsx, .xls and .pdf — multiple files allowed
           </p>
         </div>
       )}

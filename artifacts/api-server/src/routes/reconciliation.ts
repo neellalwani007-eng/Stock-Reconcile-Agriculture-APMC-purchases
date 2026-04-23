@@ -1,8 +1,8 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import multer from "multer";
 import {
-  parseSalesSheet,
-  parsePurchaseSheet,
+  parseSalesBuffer,
+  parsePurchaseBuffer,
   runMatching,
   buildResult,
   buildUpdatedSalesExcel,
@@ -163,10 +163,10 @@ router.post(
       const data = await getDataFromDrive(authedReq);
 
       if (files["salesFile"]) {
-        const allSaleRows: ReturnType<typeof parseSalesSheet> = [];
+        const allSaleRows: Omit<SaleRow, "id">[] = [];
         for (const f of files["salesFile"]) {
           try {
-            const rows = parseSalesSheet(f.buffer);
+            const rows = await parseSalesBuffer(f.buffer, f.mimetype);
             if (rows.length === 0) {
               fileResults.push({
                 filename: f.originalname,
@@ -216,10 +216,10 @@ router.post(
       }
 
       if (files["purchaseFile"]) {
-        const allPurchaseRows: ReturnType<typeof parsePurchaseSheet> = [];
+        const allPurchaseRows: Omit<PurchaseRow, "id">[] = [];
         for (const f of files["purchaseFile"]) {
           try {
-            const rows = parsePurchaseSheet(f.buffer);
+            const rows = await parsePurchaseBuffer(f.buffer, f.mimetype);
             if (rows.length === 0) {
               fileResults.push({
                 filename: f.originalname,
