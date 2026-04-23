@@ -30,3 +30,4 @@ timeoutMs = 20000
 [userenv.shared]
 GOOGLE_CLIENT_ID = "94810128357-r3r99g18f3fm06lg5rbi8o08thhem430.apps.googleusercontent.com"
 GOOGLE_CLIENT_SECRET = "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"
+ADMIN_EMAIL = "neellalwani007@gmail.com"
