@@ -6,6 +6,7 @@ import { useAuth } from "@workspace/replit-auth-web";
 import Dashboard from "@/pages/Dashboard";
 import NotFound from "@/pages/not-found";
 import { ArrowRightLeft, Loader2, CheckCircle2, Lock, FileSpreadsheet } from "lucide-react";
+import AdminPage from "@/pages/AdminPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -132,6 +133,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>
   );

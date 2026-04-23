@@ -19,6 +19,15 @@ import { formatCurrency, formatDate, cn } from "@/lib/utils";
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 type AppMode = "upload" | "reports";
+type SubState = "trial" | "active" | "warning" | "grace" | "locked";
+interface SubscriptionStatus {
+  state: SubState;
+  canUpload: boolean;
+  trialDaysLeft?: number;
+  daysRemaining?: number;
+  graceDaysLeft?: number;
+  expiresOn?: string;
+}
 
 interface FileImportResult {
   filename: string;
@@ -1788,6 +1797,50 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
   );
 }
 
+/* ── Subscription Banner ─────────────────────────────────────────────────────── */
+function SubscriptionBanner({ status }: { status: SubscriptionStatus }) {
+  const { state, trialDaysLeft, daysRemaining, graceDaysLeft, expiresOn } = status;
+
+  if (state === "active") return null;
+
+  const configs: Record<Exclude<SubState, "active">, { bg: string; border: string; icon: React.ReactNode; text: string }> = {
+    trial: {
+      bg: "bg-blue-500/10",
+      border: "border-blue-500/30",
+      icon: <Clock className="w-4 h-4 text-blue-400 shrink-0" />,
+      text: `Free trial — ${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} remaining. Purchase a license to continue after your trial ends.`,
+    },
+    warning: {
+      bg: "bg-yellow-500/10",
+      border: "border-yellow-500/30",
+      icon: <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />,
+      text: `⚠️ Your license expires in ${daysRemaining} day${daysRemaining !== 1 ? "s" : ""} (${expiresOn}). Contact us to renew.`,
+    },
+    grace: {
+      bg: "bg-orange-500/10",
+      border: "border-orange-500/30",
+      icon: <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0" />,
+      text: `⚠️ Your license expired on ${expiresOn}. Upload is disabled. ${graceDaysLeft} day${graceDaysLeft !== 1 ? "s" : ""} of grace period remaining — contact us to renew and restore full access.`,
+    },
+    locked: {
+      bg: "bg-destructive/10",
+      border: "border-destructive/30",
+      icon: <Lock className="w-4 h-4 text-destructive shrink-0" />,
+      text: `🔒 Your license has expired${expiresOn ? ` (${expiresOn})` : ""}. Upload is disabled. Your existing records are still accessible in Reports. Contact us to renew.`,
+    },
+  };
+
+  const cfg = configs[state as Exclude<SubState, "active">];
+  if (!cfg) return null;
+
+  return (
+    <div className={cn("flex items-start space-x-3 px-4 py-3 rounded-xl border text-sm", cfg.bg, cfg.border)}>
+      {cfg.icon}
+      <span className="text-foreground/90">{cfg.text}</span>
+    </div>
+  );
+}
+
 /* ── Main Dashboard ──────────────────────────────────────────────────────────── */
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -1801,7 +1854,15 @@ export default function Dashboard() {
   const [showFormatGuide, setShowFormatGuide] = useState(false);
   const [selectedFY, setSelectedFY] = useState<string>(getCurrentFY());
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+  const [subStatus, setSubStatus] = useState<SubscriptionStatus | null>(null);
   const availableFYs = getAvailableFYs();
+
+  useEffect(() => {
+    fetch(`${BASE}/api/subscription/status`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setSubStatus(d as SubscriptionStatus); })
+      .catch(() => {});
+  }, []);
 
   const { data: reportsData, isLoading: reportsLoading, refetch: refetchReports, error: reportsError } = useGetReports({
     query: { enabled: appMode === "reports" },
@@ -1842,7 +1903,8 @@ export default function Dashboard() {
   const handleSwitchToReports = () => { setAppMode("reports"); setLiveReportsData(null); refetchReports(); };
   const handleReportsDataChange = (data: ReconciliationResult) => setLiveReportsData(data);
 
-  const isRunDisabled = uploading || (salesFiles.length === 0 && purchaseFiles.length === 0);
+  const canUpload = subStatus ? subStatus.canUpload : true;
+  const isRunDisabled = uploading || !canUpload || (salesFiles.length === 0 && purchaseFiles.length === 0);
 
   const displayName = user?.firstName || user?.email?.split("@")[0] || "User";
   const rawReportsData = liveReportsData ?? reportsData;
@@ -1905,6 +1967,9 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 space-y-8">
+        {subStatus && subStatus.state !== "active" && (
+          <SubscriptionBanner status={subStatus} />
+        )}
         <AnimatePresence mode="wait">
           {appMode === "reports" && (
             <motion.div key="reports-mode" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
@@ -1987,7 +2052,13 @@ export default function Dashboard() {
                     </div>
 
                     <div className="p-6 md:p-8">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {!canUpload && (
+                        <div className="mb-6 flex items-center space-x-3 p-4 bg-muted/60 border border-border rounded-xl">
+                          <Lock className="w-5 h-5 text-muted-foreground shrink-0" />
+                          <p className="text-sm text-muted-foreground">Upload is disabled. Your saved records are still available in Reports.</p>
+                        </div>
+                      )}
+                      <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-8", !canUpload && "pointer-events-none opacity-40")}>
                         <div className="space-y-3">
                           <label className="text-sm font-semibold text-foreground">Sales Data</label>
                           <FileDropzone label="Sales Excel" files={salesFiles} onFilesChange={setSalesFiles} />
