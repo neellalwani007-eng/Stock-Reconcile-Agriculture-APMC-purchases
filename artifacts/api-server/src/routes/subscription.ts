@@ -61,7 +61,7 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
 
     const graceDaysLeft = GRACE_DAYS - daysPastExpiry;
     if (graceDaysLeft > 0) {
-      return { state: "grace", canUpload: false, graceDaysLeft, expiresOn: fmtDate(latest.expiresOn) };
+      return { state: "grace", canUpload: true, graceDaysLeft, expiresOn: fmtDate(latest.expiresOn) };
     }
 
     return { state: "locked", canUpload: false, expiresOn: fmtDate(latest.expiresOn) };

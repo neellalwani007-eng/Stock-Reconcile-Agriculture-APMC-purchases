@@ -1820,7 +1820,7 @@ function SubscriptionBanner({ status }: { status: SubscriptionStatus }) {
       bg: "bg-orange-500/10",
       border: "border-orange-500/30",
       icon: <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0" />,
-      text: `⚠️ Your license expired on ${expiresOn}. Upload is disabled. ${graceDaysLeft} day${graceDaysLeft !== 1 ? "s" : ""} of grace period remaining — contact us to renew and restore full access.`,
+      text: `⚠️ Your license expired on ${expiresOn}. ${graceDaysLeft} day${graceDaysLeft !== 1 ? "s" : ""} of grace period remaining — uploads are still allowed. Contact us to renew before the grace period ends.`,
     },
     locked: {
       bg: "bg-destructive/10",
