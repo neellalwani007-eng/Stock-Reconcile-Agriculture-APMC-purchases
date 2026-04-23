@@ -1820,13 +1820,13 @@ function SubscriptionBanner({ status }: { status: SubscriptionStatus }) {
       bg: "bg-orange-500/10",
       border: "border-orange-500/30",
       icon: <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0" />,
-      text: `⚠️ Your license expired on ${expiresOn}. ${graceDaysLeft} day${graceDaysLeft !== 1 ? "s" : ""} of grace period remaining — uploads are still allowed. Contact us to renew before the grace period ends.`,
+      text: `⚠️ Your license expired on ${expiresOn}. Grace period ends in ${graceDaysLeft} day${graceDaysLeft !== 1 ? "s" : ""}. Contact us to renew before the grace period ends.`,
     },
     locked: {
       bg: "bg-destructive/10",
       border: "border-destructive/30",
       icon: <Lock className="w-4 h-4 text-destructive shrink-0" />,
-      text: `🔒 Your license has expired${expiresOn ? ` (${expiresOn})` : ""}. Upload is disabled. Your existing records are still accessible in Reports. Contact us to renew.`,
+      text: `🔒 License Expired. Contact us to renew your license.`,
     },
   };
 
