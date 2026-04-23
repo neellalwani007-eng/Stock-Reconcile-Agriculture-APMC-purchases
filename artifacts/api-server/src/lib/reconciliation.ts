@@ -51,7 +51,7 @@ export interface MatchUpdate {
   purchaseBillDate: string;
 }
 
-function normalizeDate(val: unknown): string {
+export function normalizeDate(val: unknown): string {
   if (val === null || val === undefined || val === "") return "";
   if (typeof val === "number") {
     const d = XLSX.SSF.parse_date_code(val);
@@ -81,7 +81,7 @@ function normalizeDate(val: unknown): string {
   return String(val);
 }
 
-function normalizeNum(val: unknown): number {
+export function normalizeNum(val: unknown): number {
   if (typeof val === "number") return Math.round(val * 10000) / 10000;
   if (typeof val === "string") {
     const n = parseFloat(val.replace(/,/g, ""));
@@ -90,7 +90,7 @@ function normalizeNum(val: unknown): number {
   return 0;
 }
 
-function normalizeStr(val: unknown): string {
+export function normalizeStr(val: unknown): string {
   if (val === null || val === undefined) return "";
   // normalize("NFC") ensures Marathi / Devanagari Unicode forms compare correctly
   return String(val).normalize("NFC").trim().toLowerCase();

@@ -2,6 +2,7 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore – no types for the internal path, but the function signature is identical
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
+import { normalizeDate, normalizeNum } from "./reconciliation.js";
 import type { SaleRow, PurchaseRow } from "./reconciliation.js";
 
 const UNIT_TOKENS = new Set([
@@ -18,24 +19,6 @@ const HEADER_KEYWORDS = [
   "date", "item", "commodity", "qty", "quantity", "rate", "amount",
   "amt", "particulars", "description",
 ];
-
-function normalizeDate(val: string): string {
-  const trimmed = val.trim();
-  const ddmmyyyy = trimmed.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
-  if (ddmmyyyy) {
-    return `${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, "0")}-${ddmmyyyy[1].padStart(2, "0")}`;
-  }
-  const isoLike = trimmed.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
-  if (isoLike) {
-    return `${isoLike[1]}-${isoLike[2].padStart(2, "0")}-${isoLike[3].padStart(2, "0")}`;
-  }
-  return trimmed;
-}
-
-function normalizeNum(val: string): number {
-  const n = parseFloat(val.replace(/,/g, ""));
-  return isNaN(n) ? 0 : Math.round(n * 10000) / 10000;
-}
 
 function toTitleCase(str: string): string {
   return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -69,7 +52,7 @@ function findHeaderLine(lines: string[]): number {
     for (const kw of HEADER_KEYWORDS) {
       if (lower.includes(kw)) hits++;
     }
-    if (hits >= 2) return i;
+    if (hits >= 3) return i;
   }
   return -1;
 }
@@ -108,6 +91,9 @@ function tokenizeLine(line: string): RowTokens | null {
   return { item, date, numbers };
 }
 
+const PDF_UNRECOGNISED_ERROR =
+  "PDF format not recognised. Please export as Excel instead.";
+
 export async function parseSalesPdf(buffer: Buffer): Promise<Omit<SaleRow, "id">[]> {
   const text = await extractText(buffer);
   const lines = text.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
@@ -122,6 +108,7 @@ export async function parseSalesPdf(buffer: Buffer): Promise<Omit<SaleRow, "id">
     const parsed = tokenizeLine(lines[i]);
     if (!parsed) continue;
 
+    // Tally column order: qty, rate, amount (amount is always last)
     const qty = parsed.numbers[0] ?? 0;
     if (qty === 0) continue;
 
@@ -142,9 +129,7 @@ export async function parseSalesPdf(buffer: Buffer): Promise<Omit<SaleRow, "id">
   }
 
   if (rows.length === 0) {
-    throw new Error(
-      "PDF format not recognised. Please export your bill as Excel and upload that instead."
-    );
+    throw new Error(PDF_UNRECOGNISED_ERROR);
   }
 
   return rows;
@@ -184,9 +169,7 @@ export async function parsePurchasePdf(buffer: Buffer): Promise<Omit<PurchaseRow
   }
 
   if (rows.length === 0) {
-    throw new Error(
-      "PDF format not recognised. Please export your bill as Excel and upload that instead."
-    );
+    throw new Error(PDF_UNRECOGNISED_ERROR);
   }
 
   return rows;
