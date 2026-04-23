@@ -1437,10 +1437,10 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
   const toggleId = (id: number) => setSelectedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const toggleAll = (ids: number[]) => setSelectedIds((prev) => prev.size === ids.length ? new Set() : new Set(ids));
 
-  const tabs: { id: TabId; label: string; count: number; icon: ReactNode }[] = [
-    { id: "pending",    label: "Pending Pavati",      count: data.pendingCount,             icon: <Clock className="w-4 h-4" /> },
-    { id: "purchase",   label: "Purchase Exceptions", count: data.unmatchedPurchaseCount,   icon: <AlertCircle className="w-4 h-4" /> },
-    { id: "all-sales",  label: "All Sales",           count: data.salesRows.length,          icon: <CheckCircle2 className="w-4 h-4" /> },
+  const tabs: { id: TabId; label: string; shortLabel: string; count: number; icon: ReactNode }[] = [
+    { id: "pending",    label: "Pending Pavati",      shortLabel: "Pending",    count: data.pendingCount,             icon: <Clock className="w-4 h-4" /> },
+    { id: "purchase",   label: "Purchase Exceptions", shortLabel: "Purchase",   count: data.unmatchedPurchaseCount,   icon: <AlertCircle className="w-4 h-4" /> },
+    { id: "all-sales",  label: "All Sales",           shortLabel: "Sales",      count: data.salesRows.length,          icon: <CheckCircle2 className="w-4 h-4" /> },
   ];
 
   const downloadBtns = [
@@ -1545,10 +1545,12 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
           <div className="flex rounded-xl overflow-hidden border border-border w-fit">
             {tabs.map((t, i) => (
               <button key={t.id} onClick={() => setActiveTab(t.id)}
-                className={cn("flex items-center space-x-1.5 px-3 py-2 text-xs font-medium transition-colors",
+                className={cn("flex items-center space-x-1.5 px-2.5 sm:px-3 py-2 text-xs font-medium transition-colors",
                   i > 0 && "border-l border-border",
                   activeTab === t.id ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground")}>
-                {t.icon}<span>{t.label}</span>
+                {t.icon}
+                <span className="hidden sm:inline">{t.label}</span>
+                <span className="sm:hidden">{t.shortLabel}</span>
                 <span className={cn("px-1.5 py-0.5 rounded-full text-[10px] font-bold",
                   activeTab === t.id ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground")}>
                   {t.count}
@@ -1929,7 +1931,7 @@ export default function Dashboard() {
             <div className="bg-primary p-2 rounded-lg text-primary-foreground shadow-sm">
               <ArrowRightLeft className="w-5 h-5" />
             </div>
-            <h1 className="font-display font-bold text-xl text-foreground">Stock Reconciler</h1>
+            <h1 className="font-display font-bold text-xl text-foreground hidden sm:block">Stock Reconciler</h1>
           </div>
           <div className="flex items-center space-x-2">
             {appMode === "upload" && uploadResult && (
@@ -1945,7 +1947,9 @@ export default function Dashboard() {
               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 pointer-events-none" />
             </div>
             {availableMonths.length > 0 && (
-              <MultiMonthDropdown months={availableMonths} selected={selectedMonths} onChange={setSelectedMonths} />
+              <span className="hidden sm:block">
+                <MultiMonthDropdown months={availableMonths} selected={selectedMonths} onChange={setSelectedMonths} />
+              </span>
             )}
             <button onClick={appMode === "reports" ? () => setAppMode("upload") : handleSwitchToReports}
               className={cn("flex items-center space-x-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors",
@@ -2074,10 +2078,10 @@ export default function Dashboard() {
                           <p className="text-sm text-destructive">{uploadError}</p>
                         </div>
                       )}
-                      <div className="mt-8 flex items-center justify-between">
+                      <div className="mt-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <p className="text-xs text-muted-foreground">Re-uploading the same date + commodity replaces only those records.</p>
                         <button onClick={handleRun} disabled={isRunDisabled}
-                          className="flex items-center space-x-2 px-8 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md active:scale-[0.98]">
+                          className="flex items-center justify-center space-x-2 w-full sm:w-auto px-8 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md active:scale-[0.98]">
                           {uploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>Processing...</span></> : <><ArrowRightLeft className="w-5 h-5" /><span>Run Match</span></>}
                         </button>
                       </div>

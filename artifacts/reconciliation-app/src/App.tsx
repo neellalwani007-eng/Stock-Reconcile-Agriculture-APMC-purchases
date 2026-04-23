@@ -39,7 +39,7 @@ function LoginPage() {
   const { login } = useAuth();
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-between py-20 px-6 relative overflow-hidden"
+      className="min-h-screen flex flex-col items-center justify-between py-10 sm:py-20 px-4 sm:px-6 relative overflow-hidden"
       style={{ background: "radial-gradient(ellipse at 50% 0%, #1a4731 0%, #0d2818 55%, #071910 100%)" }}
     >
       {/* Dot-grid background overlay */}
@@ -60,8 +60,8 @@ function LoginPage() {
             <ArrowRightLeft className="w-9 h-9 text-white" />
           </div>
         </div>
-        <h1 className="text-4xl font-extrabold text-white mb-3 tracking-tight">Stock Reconciler</h1>
-        <p className="text-white/60 text-sm max-w-[280px]">
+        <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-3 tracking-tight">Stock Reconciler</h1>
+        <p className="text-white/60 text-sm max-w-[260px]">
           Automate reconciliation in seconds
         </p>
       </div>

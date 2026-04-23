@@ -189,7 +189,7 @@ export default function AdminPage() {
                       {subscription && (
                         <button onClick={() => revokeLicense(u.id)} disabled={!!issuing}
                           className="flex items-center space-x-1.5 px-3 py-2 text-xs font-semibold bg-destructive/10 text-destructive border border-destructive/20 rounded-lg hover:bg-destructive/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                          {isIssuing === u.id + "-revoke" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Lock className="w-3 h-3" />}
+                          {issuing === u.id + "-revoke" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Lock className="w-3 h-3" />}
                           <span>Revoke</span>
                         </button>
                       )}
