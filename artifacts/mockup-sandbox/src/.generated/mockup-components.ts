@@ -4,7 +4,10 @@ export const modules: ModuleMap = {
   "./components/mockups/login-layout/ImmersiveDark.tsx": () => import("../components/mockups/login-layout/ImmersiveDark.tsx"),
   "./components/mockups/login-layout/MinimalFloat.tsx": () => import("../components/mockups/login-layout/MinimalFloat.tsx"),
   "./components/mockups/login-layout/SplitBrand.tsx": () => import("../components/mockups/login-layout/SplitBrand.tsx"),
+  "./components/mockups/login-tnc/KeyTermsSummary.tsx": () => import("../components/mockups/login-tnc/KeyTermsSummary.tsx"),
   "./components/mockups/login-tnc/LoginWithTnC.tsx": () => import("../components/mockups/login-tnc/LoginWithTnC.tsx"),
+  "./components/mockups/login-tnc/PassiveConsent.tsx": () => import("../components/mockups/login-tnc/PassiveConsent.tsx"),
+  "./components/mockups/login-tnc/TwoStepReview.tsx": () => import("../components/mockups/login-tnc/TwoStepReview.tsx"),
   "./components/mockups/theme-compare/DarkForestTheme.tsx": () => import("../components/mockups/theme-compare/DarkForestTheme.tsx"),
   "./components/mockups/theme-compare/LightTheme.tsx": () => import("../components/mockups/theme-compare/LightTheme.tsx")
 };
