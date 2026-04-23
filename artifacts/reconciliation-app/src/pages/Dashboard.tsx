@@ -173,13 +173,34 @@ function useReconciliationDownloads() {
 function FileImportBanner({ results, onClose }: { results: FileImportResult[]; onClose: () => void }) {
   const failed = results.filter((r) => !r.success);
   const succeeded = results.filter((r) => r.success);
+  const totalRows = succeeded.reduce((sum, r) => sum + r.rowCount, 0);
+  const allFailed = failed.length === results.length;
+  const anyFailed = failed.length > 0;
+
   return (
     <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
-      className="rounded-xl border border-border bg-card/80 backdrop-blur overflow-hidden">
+      className={cn("rounded-xl border bg-card/80 backdrop-blur overflow-hidden",
+        allFailed ? "border-destructive/40" : anyFailed ? "border-amber-500/40" : "border-green-500/30")}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-        <div className="flex items-center space-x-2 text-sm font-semibold text-foreground">
-          <FileSpreadsheet className="w-4 h-4 text-primary" />
-          <span>Import Results — {results.length} file{results.length !== 1 ? "s" : ""}</span>
+        <div className="flex items-center space-x-3">
+          <FileSpreadsheet className="w-4 h-4 text-primary shrink-0" />
+          <span className="text-sm font-semibold text-foreground">
+            Import Results — {results.length} file{results.length !== 1 ? "s" : ""}
+          </span>
+          <div className="flex items-center space-x-1.5">
+            {succeeded.length > 0 && (
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 text-xs font-medium">
+                <CheckCircle2 className="w-3 h-3" />
+                <span>{succeeded.length} ok</span>
+              </span>
+            )}
+            {failed.length > 0 && (
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-destructive/15 text-destructive text-xs font-medium">
+                <AlertTriangle className="w-3 h-3" />
+                <span>{failed.length} failed</span>
+              </span>
+            )}
+          </div>
         </div>
         <button onClick={onClose} className="p-1 hover:bg-muted rounded-lg transition-colors">
           <X className="w-4 h-4 text-muted-foreground" />
@@ -189,22 +210,37 @@ function FileImportBanner({ results, onClose }: { results: FileImportResult[]; o
         {succeeded.map((r, i) => (
           <div key={i} className="flex items-start space-x-3 px-5 py-3">
             <CheckCircle2 className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-foreground truncate">{r.filename}</p>
               <p className="text-xs text-muted-foreground">{r.type === "sale" ? "Sales" : "Purchase"} · {r.rowCount} row{r.rowCount !== 1 ? "s" : ""} imported</p>
             </div>
+            <span className="text-xs font-semibold text-green-400 shrink-0 mt-0.5">{r.rowCount}r</span>
           </div>
         ))}
         {failed.map((r, i) => (
           <div key={i} className="flex items-start space-x-3 px-5 py-3 bg-destructive/5">
             <FileX className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-destructive truncate">{r.filename}</p>
               <p className="text-xs text-muted-foreground">{r.type === "sale" ? "Sales" : "Purchase"} · {r.error}</p>
             </div>
+            <span className="text-xs font-semibold text-destructive shrink-0 mt-0.5">Error</span>
           </div>
         ))}
       </div>
+      {succeeded.length > 0 && (
+        <div className="flex items-center justify-between px-5 py-2.5 bg-muted/30 border-t border-border/50">
+          <span className="text-xs text-muted-foreground">
+            {totalRows} total row{totalRows !== 1 ? "s" : ""} imported across {succeeded.length} file{succeeded.length !== 1 ? "s" : ""}
+          </span>
+          {anyFailed && (
+            <span className="text-xs text-amber-400 font-medium flex items-center space-x-1">
+              <AlertTriangle className="w-3 h-3" />
+              <span>{failed.length} file{failed.length !== 1 ? "s" : ""} skipped</span>
+            </span>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 }
