@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@workspace/replit-auth-web";
 import Dashboard from "@/pages/Dashboard";
 import NotFound from "@/pages/not-found";
-import { ArrowRightLeft, Loader2, CheckCircle2, Lock, FileSpreadsheet, ArrowLeft, ShieldCheck } from "lucide-react";
+import { ArrowRightLeft, Loader2, CheckCircle2, Lock, FileSpreadsheet } from "lucide-react";
 import AdminPage from "@/pages/AdminPage";
 
 const queryClient = new QueryClient({
@@ -36,24 +36,32 @@ const features = [
   },
 ];
 
-const terms = [
-  {
-    title: "Your data is private",
-    body: "Uploaded files are accessible only to your account. We never share or sell your data.",
-  },
-  {
-    title: "Subscription terms",
-    body: "Licences auto-renew. You may cancel before the renewal date for a full stop; no partial refunds.",
-  },
-  {
-    title: "No liability for errors",
-    body: "Reconciliation output is a tool to assist — always verify results before financial decisions.",
-  },
-];
+const TC_ACCEPTED_KEY = "tc_accepted_v1";
 
 function LoginPage() {
   const { login } = useAuth();
-  const [step, setStep] = useState<"login" | "terms">("login");
+
+  // Check if user has already accepted T&C in this browser
+  const [accepted, setAccepted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(TC_ACCEPTED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  // Persist acceptance to localStorage whenever it becomes true
+  useEffect(() => {
+    if (accepted) {
+      try { localStorage.setItem(TC_ACCEPTED_KEY, "1"); } catch { /* ignore */ }
+    }
+  }, [accepted]);
+
+  const handleLogin = () => {
+    // Ensure flag is saved before redirecting (belt-and-suspenders)
+    try { localStorage.setItem(TC_ACCEPTED_KEY, "1"); } catch { /* ignore */ }
+    login();
+  };
 
   return (
     <div
@@ -95,22 +103,52 @@ function LoginPage() {
         ))}
       </div>
 
-      {/* Bottom — two-step card */}
+      {/* Bottom — sign-in card */}
       <div className="relative z-10 w-full max-w-sm">
         <div className="absolute inset-0 rounded-2xl bg-emerald-500/20 blur-2xl scale-105 -z-10" />
-
-        {/* Step 1 — Google button */}
-        <div
-          className={`bg-white/10 backdrop-blur-xl border border-emerald-400/30 rounded-2xl p-8 shadow-2xl transition-all duration-300 ${
-            step === "login" ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none absolute inset-0"
-          }`}
-        >
+        <div className="bg-white/10 backdrop-blur-xl border border-emerald-400/30 rounded-2xl p-8 shadow-2xl">
           <h2 className="text-white text-lg font-semibold mb-5 text-center">Sign in to continue</h2>
+
+          {/* T&C checkbox — only shown until the user has accepted once */}
+          {!accepted && (
+            <label className="flex items-start gap-3 mb-5 cursor-pointer group">
+              <div className="relative flex-shrink-0 mt-0.5">
+                <input
+                  type="checkbox"
+                  checked={accepted}
+                  onChange={(e) => setAccepted(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-5 h-5 rounded border-2 border-white/30 bg-white/5 peer-checked:bg-emerald-500 peer-checked:border-emerald-500 transition-all duration-150 flex items-center justify-center group-hover:border-white/60">
+                  {accepted && (
+                    <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+              </div>
+              <span className="text-white/55 text-xs leading-relaxed">
+                I have read and agree to the{" "}
+                <a
+                  href="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Terms &amp; Conditions and Privacy Policy
+                </a>
+              </span>
+            </label>
+          )}
+
+          {/* Google Sign-in button */}
           <button
-            onClick={() => setStep("terms")}
-            className="w-full bg-white text-gray-800 rounded-xl px-5 py-3 text-sm font-semibold flex items-center justify-center gap-3 hover:bg-gray-100 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] transition-all duration-150 shadow-sm cursor-pointer"
+            onClick={handleLogin}
+            disabled={!accepted}
+            className="w-full bg-white text-gray-800 rounded-xl px-5 py-3 text-sm font-semibold flex items-center justify-center gap-3 transition-all duration-150 shadow-sm cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none enabled:hover:bg-gray-100 enabled:hover:-translate-y-0.5 enabled:hover:shadow-md enabled:active:scale-[0.98]"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
@@ -119,62 +157,18 @@ function LoginPage() {
             </svg>
             Continue with Google
           </button>
-          <p className="text-white/40 text-xs text-center mt-4">
-            Your data is private, secure, and synced across devices
-          </p>
-        </div>
 
-        {/* Step 2 — Terms review */}
-        <div
-          className={`bg-white/10 backdrop-blur-xl border border-emerald-400/30 rounded-2xl p-6 shadow-2xl transition-all duration-300 ${
-            step === "terms" ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none absolute inset-0"
-          }`}
-        >
-          <div className="flex items-center gap-3 mb-4">
-            <button
-              onClick={() => setStep("login")}
-              className="text-white/40 hover:text-white/70 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <h2 className="text-white text-sm font-semibold">Before you continue</h2>
-            </div>
-          </div>
+          {!accepted && (
+            <p className="text-white/30 text-[11px] text-center mt-3">
+              Please tick the checkbox above to continue
+            </p>
+          )}
 
-          <div className="space-y-3 mb-5">
-            {terms.map((term) => (
-              <div key={term.title} className="bg-white/5 border border-white/10 rounded-xl px-4 py-3">
-                <p className="text-emerald-400 text-[11px] font-semibold mb-1">{term.title}</p>
-                <p className="text-white/55 text-[11px] leading-relaxed">{term.body}</p>
-              </div>
-            ))}
-          </div>
-
-          <a
-            href="/terms"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-white/30 text-[10px] underline underline-offset-2 block text-center mb-4 hover:text-white/50 transition-colors"
-          >
-            Read full Terms &amp; Conditions and Privacy Policy
-          </a>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => setStep("login")}
-              className="flex-1 border border-white/20 text-white/60 rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-white/5 transition-all duration-150"
-            >
-              Decline
-            </button>
-            <button
-              onClick={login}
-              className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold bg-emerald-500 text-white hover:bg-emerald-400 active:scale-[0.98] transition-all duration-150"
-            >
-              Accept &amp; Sign in
-            </button>
-          </div>
+          {accepted && (
+            <p className="text-white/40 text-xs text-center mt-4">
+              Your data is private, secure, and synced across devices
+            </p>
+          )}
         </div>
       </div>
     </div>
