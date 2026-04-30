@@ -1,7 +1,3 @@
-// Import from the library core to avoid the known test-file bug in pdf-parse@1.1.1 index.js
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore – no types for the internal path, but the function signature is identical
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { normalizeDate, normalizeNum, normalizeStr } from "./reconciliation.js";
 import type { SaleRow, PurchaseRow } from "./reconciliation.js";
 
@@ -71,6 +67,9 @@ function toTitleCase(str: string): string {
 }
 
 async function extractText(buffer: Buffer): Promise<string> {
+  // Lazy-load pdf-parse only when a PDF is actually uploaded — keeps startup memory lean.
+  // Using the lib path directly avoids the known test-file bug in pdf-parse@1.1.1 index.js.
+  const { default: pdfParse } = await import("pdf-parse/lib/pdf-parse.js") as { default: (buf: Buffer) => Promise<{ text: string }> };
   const result = await pdfParse(buffer);
   return result.text;
 }
