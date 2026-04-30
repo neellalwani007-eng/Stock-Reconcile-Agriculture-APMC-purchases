@@ -1,0 +1,40 @@
+{"level":30,"time":1777562227914,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":2,"method":"HEAD","url":"/"},"res":{"statusCode":200},"responseTime":1,"msg":"request completed"}
+Menu
+{"level":30,"time":1777563073636,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":3,"method":"HEAD","url":"/"},"res":{"statusCode":200},"responseTime":1,"msg":"request completed"}
+{"level":30,"time":1777563919007,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":4,"method":"HEAD","url":"/"},"res":{"statusCode":200},"responseTime":2,"msg":"request completed"}
+{"level":30,"time":1777564763686,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":5,"method":"HEAD","url":"/"},"res":{"statusCode":200},"responseTime":3,"msg":"request completed"}
+(node:50) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"level":30,"time":1777565514977,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":6,"method":"GET","url":"/"},"res":{"statusCode":200},"responseTime":1859,"msg":"request completed"}
+{"level":30,"time":1777565515188,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":7,"method":"GET","url":"/assets/index-C3mV2Byg.css"},"res":{"statusCode":304},"responseTime":5,"msg":"request completed"}
+{"level":30,"time":1777565515316,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":8,"method":"GET","url":"/assets/index-Bztkapbh.js"},"res":{"statusCode":304},"responseTime":4,"msg":"request completed"}
+{"level":30,"time":1777565515589,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":9,"method":"GET","url":"/api/auth/user"},"res":{"statusCode":304},"responseTime":7,"msg":"request completed"}
+{"level":30,"time":1777565515761,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":10,"method":"GET","url":"/favicon.svg"},"res":{"statusCode":200},"responseTime":2,"msg":"request completed"}
+{"level":30,"time":1777565515767,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":11,"method":"GET","url":"/apple-touch-icon.png"},"res":{"statusCode":200},"responseTime":5,"msg":"request completed"}
+{"level":30,"time":1777565515769,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":12,"method":"GET","url":"/favicon.ico"},"res":{"statusCode":200},"responseTime":4,"msg":"request completed"}
+{"level":30,"time":1777565515896,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":13,"method":"GET","url":"/apple-touch-icon-precomposed.png"},"res":{"statusCode":200},"responseTime":2,"msg":"request completed"}
+{"level":30,"time":1777565515967,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":14,"method":"GET","url":"/api/auth/user"},"res":{"statusCode":304},"responseTime":6,"msg":"request completed"}
+{"level":30,"time":1777565516276,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","req":{"id":15,"method":"GET","url":"/api/subscription/status"},"res":{"statusCode":304},"responseTime":312,"msg":"request completed"}
+<--- Last few GCs --->
+[50:0x2a3efc00]  4712099 ms: Mark-Compact (reduce) 253.3 (258.9) -> 253.3 (258.9) MB, 1999.72 / 0.00 ms  (average mu = 0.593, current mu = 0.000) last resort; GC in old space requested
+[50:0x2a3efc00]  4713899 ms: Mark-Compact 253.3 (258.9) -> 253.3 (259.9) MB, 1401.99 / 0.00 ms  (average mu = 0.482, current mu = 0.221) allocation failure; GC in old space requested
+<--- JS stacktrace --->
+FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory
+----- Native stack trace -----
+ 1: 0xb78db3 node::OOMErrorHandler(char const*, v8::OOMDetails const&) [node]
+ 2: 0xee8300 v8::Utils::ReportOOMFailure(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [node]
+ 3: 0xee85e7 v8::internal::V8::FatalProcessOutOfMemory(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [node]
+ 4: 0x10fb205  [node]
+ 5: 0x1113088 v8::internal::Heap::CollectGarbage(v8::internal::AllocationSpace, v8::internal::GarbageCollectionReason, v8::GCCallbackFlags) [node]
+ 6: 0x10e91f1 v8::internal::HeapAllocator::AllocateRawWithLightRetrySlowPath(int, v8::internal::AllocationType, v8::internal::AllocationOrigin, v8::internal::AllocationAlignment) [node]
+ 7: 0x10ea385 v8::internal::HeapAllocator::AllocateRawWithRetryOrFailSlowPath(int, v8::internal::AllocationType, v8::internal::AllocationOrigin, v8::internal::AllocationAlignment) [node]
+ 8: 0x10c78d6 v8::internal::Factory::NewFillerObject(int, v8::internal::AllocationAlignment, v8::internal::AllocationType, v8::internal::AllocationOrigin) [node]
+ 9: 0x1524981 v8::internal::Runtime_AllocateInOldGeneration(int, unsigned long*, v8::internal::Isolate*) [node]
+10: 0x195e476  [node]
+==> Running 'node --enable-source-maps ./artifacts/api-server/dist/index.mjs'
+{"level":30,"time":1777565568229,"pid":50,"hostname":"srv-d7kvmgojs32c73876vn0-hibernate-658f48b58c-cwvcn","port":10000,"msg":"Server listening"}
