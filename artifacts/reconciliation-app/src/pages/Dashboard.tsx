@@ -1931,24 +1931,8 @@ export default function Dashboard() {
       if (!res.ok) throw new Error(data.error || "Upload failed");
 
       const { fileResults: fr, ...result } = data as ReconciliationResult & { fileResults?: FileImportResult[] };
-      const uploadedResult = result as ReconciliationResult;
-      setUploadResult(uploadedResult);
+      setUploadResult(result as ReconciliationResult);
       if (fr && fr.length > 0) setFileResults(fr);
-
-      // Auto-switch FY to match the uploaded data so rows aren't hidden by the filter
-      const allDates = [
-        ...uploadedResult.salesRows.map((r) => r.saleDate),
-        ...uploadedResult.purchaseRows.map((r) => r.billDate),
-      ].filter(Boolean);
-      if (allDates.length > 0) {
-        const fyCounts = new Map<string, number>();
-        for (const d of allDates) {
-          const fy = getFYFromDate(d);
-          fyCounts.set(fy, (fyCounts.get(fy) ?? 0) + 1);
-        }
-        const dominantFY = [...fyCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-        setSelectedFY(dominantFY);
-      }
     } catch (e) { setUploadError(e instanceof Error ? e.message : "Upload failed. Please try again."); }
     finally { setUploading(false); }
   };
