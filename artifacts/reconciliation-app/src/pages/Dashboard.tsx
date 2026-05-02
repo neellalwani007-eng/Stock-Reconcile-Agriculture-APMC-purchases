@@ -2118,7 +2118,7 @@ export default function Dashboard() {
                         <p className="text-xs text-muted-foreground">Re-uploading the same date + commodity replaces only those records.</p>
                         <button onClick={handleRun} disabled={isRunDisabled}
                           className="flex items-center justify-center space-x-2 w-full sm:w-auto px-8 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md active:scale-[0.98]">
-                          {uploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>Processing...</span></> : <><ArrowRightLeft className="w-5 h-5" /><span>Run Match</span></>}
+                          {uploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>Processing...</span></> : <><ArrowRightLeft className="w-5 h-5" /><span>Run Reconciliation</span></>}
                         </button>
                       </div>
                     </div>
