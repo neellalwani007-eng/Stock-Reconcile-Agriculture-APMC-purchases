@@ -609,7 +609,7 @@ router.post("/why-unmatched", async (req: Request, res: Response) => {
       const sameItem = unmatched.filter((p) => p.item.trim().toLowerCase() === sale.item.trim().toLowerCase());
       const pool = sameItem.length > 0 ? sameItem : unmatched;
 
-      const candidates = pool.slice(0, 20).map((p) => {
+      const candidates = pool.map((p) => {
         const reasons: { field: string; saleValue: string; purchaseValue: string; ok: boolean }[] = [
           { field: "Item", saleValue: sale.item, purchaseValue: p.item, ok: sale.item.trim().toLowerCase() === p.item.trim().toLowerCase() },
           { field: "Purchase Date", saleValue: sale.saleDate, purchaseValue: p.purchaseDate, ok: sale.saleDate === p.purchaseDate },
@@ -635,7 +635,7 @@ router.post("/why-unmatched", async (req: Request, res: Response) => {
       const sameItem = pending.filter((s) => s.item.trim().toLowerCase() === purchase.item.trim().toLowerCase());
       const pool = sameItem.length > 0 ? sameItem : pending;
 
-      const candidates = pool.slice(0, 20).map((s) => {
+      const candidates = pool.map((s) => {
         const reasons: { field: string; saleValue: string; purchaseValue: string; ok: boolean }[] = [
           { field: "Item", saleValue: s.item, purchaseValue: purchase.item, ok: s.item.trim().toLowerCase() === purchase.item.trim().toLowerCase() },
           { field: "Sale Date vs Purchase Date", saleValue: s.saleDate, purchaseValue: purchase.purchaseDate, ok: s.saleDate === purchase.purchaseDate },

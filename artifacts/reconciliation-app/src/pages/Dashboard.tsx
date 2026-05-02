@@ -1408,6 +1408,291 @@ function ManualMatchModal({ sale, allData, onClose, onSuccess }: {
   );
 }
 
+/* ── Manual Match from Purchase side ────────────────────────────────────────── */
+function ManualMatchPurchaseModal({ purchase, allData, onClose, onSuccess }: {
+  purchase: PurchaseRow;
+  allData: ReconciliationResult;
+  onClose: () => void;
+  onSuccess: (data: ReconciliationResult) => void;
+}) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [selectedSale, setSelectedSale] = useState<SaleRow | null>(null);
+  const [saleCorr, setSaleCorr] = useState<Record<string, string>>({});
+  const [purCorr, setPurCorr] = useState<Record<string, string>>({});
+  const [correcting, setCorrecting] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [saleSearch, setSaleSearch] = useState("");
+
+  const pendingSales = allData.salesRows.filter((s) => s.status !== "Matched");
+
+  const closeMatches = useMemo(() => {
+    const purItemNorm = purchase.item.trim().toLowerCase();
+    return pendingSales.map((s) => {
+      let score = 0;
+      if (s.item.trim().toLowerCase() === purItemNorm) score++;
+      if (s.saleDate === purchase.purchaseDate) score++;
+      if (Math.abs(s.qty - purchase.qty) <= 0.001) score++;
+      if (Math.abs(s.rate - purchase.rate) <= 0.001) score++;
+      if (Math.abs(s.amount - purchase.amount) <= 0.02) score++;
+      return { ...s, matchScore: score };
+    }).filter((s) => s.matchScore >= 2).sort((a, b) => b.matchScore - a.matchScore);
+  }, [pendingSales, purchase]);
+
+  const filteredSales = pendingSales.filter((s) =>
+    !saleSearch ||
+    s.item.toLowerCase().includes(saleSearch.toLowerCase()) ||
+    formatDate(s.saleDate).includes(saleSearch) ||
+    String(s.qty).includes(saleSearch)
+  );
+
+  const saleVal = (field: string) => {
+    if (!selectedSale) return "";
+    return saleCorr[field] ?? String((selectedSale as Record<string, unknown>)[field] ?? "");
+  };
+  const purVal = (field: string) => purCorr[field] ?? String((purchase as Record<string, unknown>)[field] ?? "");
+
+  const fields: { key: string; label: string; saleKey: string; purKey: string }[] = [
+    { key: "item",   label: "Item",          saleKey: "item",     purKey: "item" },
+    { key: "date",   label: "Date",          saleKey: "saleDate", purKey: "purchaseDate" },
+    { key: "qty",    label: "Qty",           saleKey: "qty",      purKey: "qty" },
+    { key: "rate",   label: "Rate",          saleKey: "rate",     purKey: "rate" },
+    { key: "amount", label: "Amount",        saleKey: "amount",   purKey: "amount" },
+  ];
+
+  const isMatch = (f: typeof fields[0]) => {
+    const sv = saleVal(f.saleKey);
+    const pv = purVal(f.purKey);
+    if (f.key === "amount") return Math.abs(parseFloat(sv) - parseFloat(pv)) <= 0.02;
+    return sv.toLowerCase() === pv.toLowerCase();
+  };
+
+  const handleConfirm = async () => {
+    if (!selectedSale) return;
+    setError(""); setLoading(true);
+    try {
+      const data = await apiFetch("/manual-match", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          saleId: selectedSale.id, purchaseId: purchase.id,
+          saleCorrections: Object.keys(saleCorr).length ? saleCorr : undefined,
+          purchaseCorrections: Object.keys(purCorr).length ? purCorr : undefined,
+        }),
+      });
+      onSuccess(data); onClose();
+    } catch (e) { setError(e instanceof Error ? e.message : "Failed"); }
+    finally { setLoading(false); }
+  };
+
+  const saleRowCls = "hover:bg-muted/20";
+  const selectBtn = (s: SaleRow) => (
+    <button onClick={() => { setSelectedSale(s); setStep(2); }}
+      className="px-3 py-1.5 text-xs font-medium bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors">
+      Select
+    </button>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+        className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-primary/10 rounded-lg"><Link2 className="w-5 h-5 text-primary" /></div>
+            <div>
+              <h3 className="font-bold text-lg text-foreground">Manual Match</h3>
+              <p className="text-xs text-muted-foreground">Purchase · {formatDate(purchase.billDate)} · {purchase.item} · {purchase.qty} QTL</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-1 text-xs text-muted-foreground">
+              {[1, 2].map((s) => (
+                <span key={s} className={cn("px-2 py-1 rounded-full font-medium",
+                  step === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                  Step {s}
+                </span>
+              ))}
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
+          </div>
+        </div>
+
+        {step === 1 && (
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="p-5 border-b border-border shrink-0 space-y-3">
+              <p className="text-sm font-medium text-foreground">Select a pending sale to link with this purchase:</p>
+              <input type="text" placeholder="Search by item, date, qty…" value={saleSearch}
+                onChange={(e) => setSaleSearch(e.target.value)}
+                className={cn(inputCls, "max-w-xs")} />
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {closeMatches.length > 0 && !saleSearch && (
+                <div>
+                  <div className="px-4 py-2 bg-amber-500/10 border-b border-border flex items-center space-x-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Close Matches ({closeMatches.length})</span>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="text-xs text-muted-foreground uppercase bg-amber-500/5 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left">Score</th>
+                        <th className="px-4 py-2 text-left">Sale Date</th>
+                        <th className="px-4 py-2 text-left">Item</th>
+                        <th className="px-4 py-2 text-right">Qty</th>
+                        <th className="px-4 py-2 text-right">Rate</th>
+                        <th className="px-4 py-2 text-right">Amount</th>
+                        <th className="px-4 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      {closeMatches.map((s) => (
+                        <tr key={s.id} className={cn(saleRowCls, "bg-amber-500/5")}>
+                          <td className="px-4 py-3">
+                            <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full",
+                              s.matchScore === 5 ? "bg-green-500/20 text-green-400" : "bg-amber-500/20 text-amber-400")}>
+                              {s.matchScore}/5
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">{formatDate(s.saleDate)}</td>
+                          <td className="px-4 py-3">{s.item}</td>
+                          <td className="px-4 py-3 text-right">{s.qty.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right">{s.rate}</td>
+                          <td className="px-4 py-3 text-right">{formatCurrency(s.amount)}</td>
+                          <td className="px-4 py-3">{selectBtn(s)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="px-4 py-2 bg-muted/30 border-b border-t border-border">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">All Pending</span>
+                  </div>
+                </div>
+              )}
+              {filteredSales.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-12">No pending sales found.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-muted-foreground uppercase bg-muted/30 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Sale Date</th>
+                      <th className="px-4 py-3 text-left">Item</th>
+                      <th className="px-4 py-3 text-right">Qty</th>
+                      <th className="px-4 py-3 text-right">Rate</th>
+                      <th className="px-4 py-3 text-right">Amount</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {filteredSales.map((s) => (
+                      <tr key={s.id} className={saleRowCls}>
+                        <td className="px-4 py-3 whitespace-nowrap">{formatDate(s.saleDate)}</td>
+                        <td className="px-4 py-3">{s.item}</td>
+                        <td className="px-4 py-3 text-right">{s.qty.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right">{s.rate}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(s.amount)}</td>
+                        <td className="px-4 py-3">{selectBtn(s)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="p-5 border-t border-border shrink-0">
+              <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium text-sm">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && selectedSale && (
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="overflow-y-auto flex-1 p-6 space-y-4">
+              <p className="text-sm text-muted-foreground">Review the field comparison below. Highlighted rows have mismatches — correct them before locking.</p>
+              <div className="rounded-xl border border-border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/30 text-xs text-muted-foreground uppercase">
+                      <th className="px-4 py-3 text-left">Field</th>
+                      <th className="px-4 py-3 text-left">Sale Value</th>
+                      <th className="px-4 py-3 text-center w-8"></th>
+                      <th className="px-4 py-3 text-left">Purchase Value</th>
+                      <th className="px-4 py-3 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {fields.map((f) => {
+                      const matched = isMatch(f);
+                      const isCorrSale = correcting === `sale-${f.key}`;
+                      const isCorrPur = correcting === `pur-${f.key}`;
+                      return (
+                        <tr key={f.key} className={cn(!matched && "bg-destructive/5")}>
+                          <td className="px-4 py-3 font-medium text-foreground">{f.label}</td>
+                          <td className="px-4 py-3">
+                            {isCorrSale ? (
+                              <input autoFocus type="text" value={saleCorr[f.saleKey] ?? String((selectedSale as Record<string, unknown>)[f.saleKey] ?? "")}
+                                onChange={(e) => setSaleCorr((c) => ({ ...c, [f.saleKey]: e.target.value }))}
+                                onBlur={() => setCorrecting(null)}
+                                className="w-full px-2 py-1 text-xs rounded border border-primary bg-background text-foreground focus:outline-none" />
+                            ) : (
+                              <span className="group flex items-center space-x-1.5">
+                                <span className={cn(saleCorr[f.saleKey] && "text-primary font-medium")}>{saleVal(f.saleKey)}</span>
+                                <button onClick={() => setCorrecting(`sale-${f.key}`)} title="Correct sale value"
+                                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-muted rounded transition-all">
+                                  <Edit2 className="w-3 h-3 text-muted-foreground" />
+                                </button>
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center text-muted-foreground text-xs">vs</td>
+                          <td className="px-4 py-3">
+                            {isCorrPur ? (
+                              <input autoFocus type="text" value={purCorr[f.purKey] ?? String((purchase as Record<string, unknown>)[f.purKey] ?? "")}
+                                onChange={(e) => setPurCorr((c) => ({ ...c, [f.purKey]: e.target.value }))}
+                                onBlur={() => setCorrecting(null)}
+                                className="w-full px-2 py-1 text-xs rounded border border-primary bg-background text-foreground focus:outline-none" />
+                            ) : (
+                              <span className="group flex items-center space-x-1.5">
+                                <span className={cn(purCorr[f.purKey] && "text-primary font-medium")}>{purVal(f.purKey)}</span>
+                                <button onClick={() => setCorrecting(`pur-${f.key}`)} title="Correct purchase value"
+                                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-muted rounded transition-all">
+                                  <Edit2 className="w-3 h-3 text-muted-foreground" />
+                                </button>
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {matched ? <CheckCircle2 className="w-4 h-4 text-green-400 inline" /> : <X className="w-4 h-4 text-destructive inline" />}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {(Object.keys(saleCorr).length > 0 || Object.keys(purCorr).length > 0) && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-400">
+                  Corrected values will be saved to the records before locking the match.
+                </div>
+              )}
+              {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
+            </div>
+            <div className="flex space-x-3 p-6 pt-0 shrink-0 border-t border-border mt-0">
+              <button onClick={() => { setStep(1); setSelectedSale(null); setSaleCorr({}); setPurCorr({}); }}
+                className="px-4 py-2.5 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium text-sm">
+                ← Back
+              </button>
+              <button onClick={handleConfirm} disabled={loading}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors font-medium text-sm flex items-center justify-center space-x-2">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4" />}
+                <span>{loading ? "Locking..." : "Lock Match"}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
 /* ── Results View ────────────────────────────────────────────────────────────── */
 type TabId = "all-sales" | "pending" | "purchase";
 
@@ -1425,6 +1710,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
   const [editSaleRow, setEditSaleRow] = useState<SaleRow | null>(null);
   const [editPurchaseRow, setEditPurchaseRow] = useState<PurchaseRow | null>(null);
   const [manualMatchSale, setManualMatchSale] = useState<SaleRow | null>(null);
+  const [manualMatchPurchase, setManualMatchPurchase] = useState<PurchaseRow | null>(null);
   const [whyUnmatched, setWhyUnmatched] = useState<{ type: "sale" | "purchase"; row: SaleRow | PurchaseRow } | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -1791,6 +2077,10 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                               title={hasNote ? "Edit note" : "Add note"}>
                               <MessageSquare className="w-4 h-4" />
                             </button>
+                            <button onClick={() => setManualMatchPurchase(row)}
+                              className={cn(actionBtnCls, "text-muted-foreground hover:text-primary hover:bg-primary/10")} title="Manual match with a pending sale">
+                              <Link2 className="w-4 h-4" />
+                            </button>
                             <button onClick={() => setWhyUnmatched({ type: "purchase", row })}
                               className={cn(actionBtnCls, "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10")} title="Why didn't this match?">
                               <HelpCircle className="w-4 h-4" />
@@ -1825,6 +2115,10 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
         {manualMatchSale && (
           <ManualMatchModal sale={manualMatchSale} allData={data} onClose={() => setManualMatchSale(null)}
             onSuccess={(d) => { onDataChange(d); setManualMatchSale(null); }} />
+        )}
+        {manualMatchPurchase && (
+          <ManualMatchPurchaseModal purchase={manualMatchPurchase} allData={data} onClose={() => setManualMatchPurchase(null)}
+            onSuccess={(d) => { onDataChange(d); setManualMatchPurchase(null); }} />
         )}
         {noteModal && (
           <NoteModal purchaseId={noteModal.id} initialNote={noteModal.note} onClose={() => setNoteModal(null)}
