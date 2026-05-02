@@ -41,6 +41,7 @@ export interface DrSaleRecord {
   village?: string;
   status: "Pending" | "Matched";
   purchaseBillDate: string | null;
+  marka?: string;
 }
 
 export interface DrPurchaseRecord {
@@ -52,6 +53,7 @@ export interface DrPurchaseRecord {
   rate: string;
   amount: string;
   status: "Matched" | "Unmatched" | "Extra";
+  marka?: string;
 }
 
 export interface DriveUserData {

@@ -13,6 +13,7 @@ export interface SaleRow {
   kpNo?: string;
   farmerName?: string;
   village?: string;
+  marka?: string;
 }
 
 export interface PurchaseRow {
@@ -24,6 +25,7 @@ export interface PurchaseRow {
   rate: number;
   amount: number;
   status: "Matched" | "Unmatched" | "Extra";
+  marka?: string;
 }
 
 export interface ItemSummary {
@@ -182,6 +184,7 @@ export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
   const kpNoCol = findCol(hm, "kp no.", "kp no", "kp no.", "kpno", "kp");
   const farmerCol = findCol(hm, "farmer name", "farmer", "grower name", "grower");
   const villageCol = findCol(hm, "village", "vill", "location", "village name");
+  const markaCol = findCol(hm, "marka", "mark", "brand", "lot", "grade");
 
   const rows: Omit<SaleRow, "id">[] = [];
   for (let i = 1; i < raw.length; i++) {
@@ -204,6 +207,7 @@ export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
       kpNo: optStr(r, kpNoCol),
       farmerName: optStr(r, farmerCol),
       village: optStr(r, villageCol),
+      marka: optStr(r, markaCol),
     });
   }
   return rows;
@@ -223,6 +227,7 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
   const qtycol = findCol(hm, "qty", "quantity", "qtl", "qty (qtl)");
   const ratecol = findCol(hm, "rate", "price");
   const amtcol = findCol(hm, "amount", "amt", "total");
+  const markaCol = findCol(hm, "marka", "mark", "brand", "lot", "grade");
 
   const rows: Omit<PurchaseRow, "id">[] = [];
   for (let i = 1; i < raw.length; i++) {
@@ -242,6 +247,7 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
       rate: normalizeNum(r[ratecol]),
       amount: normalizeNum(r[amtcol]),
       status: "Unmatched",
+      marka: optStr(r, markaCol),
     });
   }
   return rows;
@@ -292,6 +298,11 @@ export function runMatching(
       const pi = candidates[ci];
       const pur = purchaseRows[pi];
       if (!lotsMatch(sale.qty, sale.rate, sale.amount, pur.qty, pur.rate, pur.amount)) continue;
+
+      // Marka check: if both sides have a marka they must agree (case-insensitive, normalised).
+      const saleM = normalizeStr(sale.marka ?? "");
+      const purM  = normalizeStr(pur.marka ?? "");
+      if (saleM && purM && saleM !== purM) continue;
 
       // Match found — update both rows.
       sale.purchaseBillDate = pur.billDate;

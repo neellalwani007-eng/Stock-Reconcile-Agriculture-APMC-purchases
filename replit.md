@@ -55,14 +55,15 @@ artifacts-monorepo/
 1. Filter by same commodity (item name, case-insensitive)
 2. Match Sale Date = Purchase Date (original purchase date field in purchase bill)
 3. Exact match on ALL of: Qty + Rate + Amount (±0.02 tolerance on Amount only)
-4. 1-to-1 lot matching (no splitting, no combining, no FIFO)
-5. Unmatched sales → "Pending" (pending farmer pavati/payment)
+4. **Marka check**: if both sale and purchase have a marka, they must agree (normalised, case-insensitive); if either is blank, marka is ignored
+5. 1-to-1 lot matching (no splitting, no combining, no FIFO)
+6. Unmatched sales → "Pending" (pending farmer pavati/payment)
 
 ### Drive Data Model (DriveUserData)
 ```typescript
 {
-  sales: DrSaleRecord[];        // id, saleDate, item, qty, rate, amount, kpNo?, farmerName?, village?, status, purchaseBillDate
-  purchases: DrPurchaseRecord[]; // id, billDate, purchaseDate, item, qty, rate, amount, status
+  sales: DrSaleRecord[];        // id, saleDate, item, qty, rate, amount, kpNo?, farmerName?, village?, marka?, status, purchaseBillDate
+  purchases: DrPurchaseRecord[]; // id, billDate, purchaseDate, item, qty, rate, amount, marka?, status
   nextSaleId: number;
   nextPurchaseId: number;
   notes: Record<string, string>; // purchase record notes keyed by id string

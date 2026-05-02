@@ -703,7 +703,7 @@ function DeleteByDateModal({ salesDates, purchaseDates, onClose, onSuccess, user
 
 /* ── Reusable Sale Form Fields ─────────────────────────────────────────────────── */
 function SaleFormFields({ form, onChange, amountManual, onAmountChange }: {
-  form: { saleDate: string; item: string; qty: string; rate: string; amount: string; kpNo?: string; farmerName?: string; village?: string };
+  form: { saleDate: string; item: string; qty: string; rate: string; amount: string; kpNo?: string; farmerName?: string; village?: string; marka?: string };
   onChange: (k: string, v: string) => void;
   amountManual: boolean;
   onAmountChange: (v: string) => void;
@@ -737,6 +737,10 @@ function SaleFormFields({ form, onChange, amountManual, onAmountChange }: {
       <div className="col-span-2 border-t border-border/50 pt-3 space-y-0.5">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Optional — Lot Details</p>
       </div>
+      <div className="col-span-2 space-y-1.5">
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Marka <span className="normal-case text-muted-foreground/60 font-normal">(brand/lot)</span></label>
+        <input type="text" placeholder="e.g. Sharbati" value={form.marka ?? ""} onChange={(e) => onChange("marka", e.target.value)} className={inputCls} />
+      </div>
       <div className="space-y-1.5">
         <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">KP No.</label>
         <input type="text" placeholder="e.g. KP001" value={form.kpNo ?? ""} onChange={(e) => onChange("kpNo", e.target.value)} className={inputCls} />
@@ -755,7 +759,7 @@ function SaleFormFields({ form, onChange, amountManual, onAmountChange }: {
 
 /* ── Add Sale Modal ──────────────────────────────────────────────────────────── */
 function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (data: ReconciliationResult) => void }) {
-  const [form, setForm] = useState({ saleDate: "", item: "", qty: "", rate: "", amount: "", kpNo: "", farmerName: "", village: "" });
+  const [form, setForm] = useState({ saleDate: "", item: "", qty: "", rate: "", amount: "", kpNo: "", farmerName: "", village: "", marka: "" });
   const [amountManual, setAmountManual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -782,10 +786,11 @@ function AddSaleModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
           saleDate: form.saleDate, item: form.item.trim(),
           qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: parseFloat(form.amount),
           kpNo: form.kpNo.trim() || undefined, farmerName: form.farmerName.trim() || undefined, village: form.village.trim() || undefined,
+          marka: form.marka.trim() || undefined,
         }),
       });
       onSuccess(data); setSuccessMsg(`Sale added for ${formatDate(form.saleDate)}.`);
-      setForm({ saleDate: "", item: "", qty: "", rate: "", amount: "", kpNo: "", farmerName: "", village: "" }); setAmountManual(false);
+      setForm({ saleDate: "", item: "", qty: "", rate: "", amount: "", kpNo: "", farmerName: "", village: "", marka: "" }); setAmountManual(false);
     } catch (e) { setError(e instanceof Error ? e.message : "Failed"); }
     finally { setLoading(false); }
   };
@@ -825,6 +830,7 @@ function EditSaleModal({ row, onClose, onSuccess }: { row: SaleRow; onClose: () 
     saleDate: row.saleDate, item: row.item,
     qty: String(row.qty), rate: String(row.rate), amount: String(row.amount),
     kpNo: row.kpNo ?? "", farmerName: row.farmerName ?? "", village: row.village ?? "",
+    marka: row.marka ?? "",
   });
   const [amountManual, setAmountManual] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -851,6 +857,7 @@ function EditSaleModal({ row, onClose, onSuccess }: { row: SaleRow; onClose: () 
           saleDate: form.saleDate, item: form.item.trim(),
           qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: parseFloat(form.amount),
           kpNo: form.kpNo.trim() || undefined, farmerName: form.farmerName.trim() || undefined, village: form.village.trim() || undefined,
+          marka: form.marka.trim() || undefined,
         }),
       });
       onSuccess(data); onClose();
@@ -891,7 +898,7 @@ function EditSaleModal({ row, onClose, onSuccess }: { row: SaleRow; onClose: () 
 
 /* ── Add Purchase Modal ──────────────────────────────────────────────────────── */
 function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (data: ReconciliationResult) => void }) {
-  const [form, setForm] = useState({ billDate: "", purchaseDate: "", item: "", qty: "", rate: "", amount: "" });
+  const [form, setForm] = useState({ billDate: "", purchaseDate: "", item: "", qty: "", rate: "", amount: "", marka: "" });
   const [amountManual, setAmountManual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -912,9 +919,9 @@ function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSucce
     if (!form.billDate || !form.purchaseDate || !form.item || !form.qty || !form.rate || !form.amount) { setError("All fields are required."); return; }
     setError(""); setLoading(true);
     try {
-      const data = await apiFetch("/records/purchase", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ billDate: form.billDate, purchaseDate: form.purchaseDate, item: form.item.trim(), qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: parseFloat(form.amount) }) });
+      const data = await apiFetch("/records/purchase", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ billDate: form.billDate, purchaseDate: form.purchaseDate, item: form.item.trim(), qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: parseFloat(form.amount), marka: form.marka.trim() || undefined }) });
       onSuccess(data); setSuccessMsg(`Purchase added for bill date ${formatDate(form.billDate)}.`);
-      setForm({ billDate: "", purchaseDate: "", item: "", qty: "", rate: "", amount: "" }); setAmountManual(false);
+      setForm({ billDate: "", purchaseDate: "", item: "", qty: "", rate: "", amount: "", marka: "" }); setAmountManual(false);
     } catch (e) { setError(e instanceof Error ? e.message : "Failed"); }
     finally { setLoading(false); }
   };
@@ -944,6 +951,10 @@ function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSucce
               </label>
               <input type="number" step="0.01" placeholder="0.00" value={form.amount} onChange={(e) => { setAmountManual(true); handleChange("amount", e.target.value); }} className={inputCls} />
             </div>
+            <div className="col-span-2 space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Marka <span className="normal-case text-muted-foreground/60 font-normal">(optional)</span></label>
+              <input type="text" placeholder="e.g. Sharbati" value={form.marka} onChange={(e) => handleChange("marka", e.target.value)} className={inputCls} />
+            </div>
           </div>
           {successMsg && <p className="text-sm text-green-400">✓ {successMsg}</p>}
           {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
@@ -963,7 +974,7 @@ function AddPurchaseModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 
 /* ── Edit Purchase Modal ──────────────────────────────────────────────────────── */
 function EditPurchaseModal({ row, onClose, onSuccess }: { row: PurchaseRow; onClose: () => void; onSuccess: (data: ReconciliationResult) => void }) {
-  const [form, setForm] = useState({ billDate: row.billDate, purchaseDate: row.purchaseDate, item: row.item, qty: String(row.qty), rate: String(row.rate), amount: String(row.amount) });
+  const [form, setForm] = useState({ billDate: row.billDate, purchaseDate: row.purchaseDate, item: row.item, qty: String(row.qty), rate: String(row.rate), amount: String(row.amount), marka: row.marka ?? "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -973,7 +984,7 @@ function EditPurchaseModal({ row, onClose, onSuccess }: { row: PurchaseRow; onCl
     if (!form.billDate || !form.purchaseDate || !form.item || !form.qty || !form.rate || !form.amount) { setError("All fields are required."); return; }
     setError(""); setLoading(true);
     try {
-      const data = await apiFetch(`/records/purchase/${row.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ billDate: form.billDate, purchaseDate: form.purchaseDate, item: form.item.trim(), qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: parseFloat(form.amount) }) });
+      const data = await apiFetch(`/records/purchase/${row.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ billDate: form.billDate, purchaseDate: form.purchaseDate, item: form.item.trim(), qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: parseFloat(form.amount), marka: form.marka.trim() || undefined }) });
       onSuccess(data); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "Failed"); }
     finally { setLoading(false); }
@@ -1001,6 +1012,10 @@ function EditPurchaseModal({ row, onClose, onSuccess }: { row: PurchaseRow; onCl
             <div className="space-y-1.5"><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Qty</label><input type="number" step="0.01" value={form.qty} onChange={(e) => handleChange("qty", e.target.value)} className={inputCls} /></div>
             <div className="space-y-1.5"><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rate</label><input type="number" step="0.01" value={form.rate} onChange={(e) => handleChange("rate", e.target.value)} className={inputCls} /></div>
             <div className="col-span-2 space-y-1.5"><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Amount</label><input type="number" step="0.01" value={form.amount} onChange={(e) => handleChange("amount", e.target.value)} className={inputCls} /></div>
+            <div className="col-span-2 space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Marka <span className="normal-case text-muted-foreground/60 font-normal">(optional)</span></label>
+              <input type="text" placeholder="e.g. Sharbati" value={form.marka} onChange={(e) => handleChange("marka", e.target.value)} className={inputCls} />
+            </div>
           </div>
           {error && <p className="text-sm text-destructive flex items-center space-x-1"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{error}</span></p>}
         </div>
@@ -1625,10 +1640,10 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
 
   useEffect(() => { setSelectedIds(new Set()); }, [activeTab]);
 
-  type SF = { saleDate: string; item: string; qty: string; rate: string; amount: string; billDate: string; status: string };
-  const [sf, setSf] = useState<SF>({ saleDate: "", item: "", qty: "", rate: "", amount: "", billDate: "", status: "" });
-  type PF = { billDate: string; purchaseDate: string; item: string; qty: string; rate: string; amount: string; status: string };
-  const [pf, setPf] = useState<PF>({ billDate: "", purchaseDate: "", item: "", qty: "", rate: "", amount: "", status: "" });
+  type SF = { saleDate: string; item: string; qty: string; rate: string; amount: string; marka: string; status: string };
+  const [sf, setSf] = useState<SF>({ saleDate: "", item: "", qty: "", rate: "", amount: "", marka: "", status: "" });
+  type PF = { billDate: string; purchaseDate: string; item: string; qty: string; rate: string; amount: string; marka: string };
+  const [pf, setPf] = useState<PF>({ billDate: "", purchaseDate: "", item: "", qty: "", rate: "", amount: "", marka: "" });
   const matchF = (val: unknown, filter: string) => !filter || String(val ?? "").toLowerCase().includes(filter.toLowerCase());
 
   const salesDates = [...new Set(data.salesRows.map((r) => r.saleDate))].sort();
@@ -1808,7 +1823,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                     <button onClick={() => {
                       const filtered = data.salesRows
                         .filter((r) => activeTab === "pending" ? r.status === "Pending" : true)
-                        .filter((r) => matchF(formatDate(r.saleDate), sf.saleDate) && matchF(r.item, sf.item) && matchF(r.qty.toFixed(2), sf.qty) && matchF(r.rate, sf.rate) && matchF(r.amount, sf.amount) && matchF(r.purchaseBillDate ? formatDate(r.purchaseBillDate) : "", sf.billDate) && matchF(r.status, sf.status))
+                        .filter((r) => matchF(formatDate(r.saleDate), sf.saleDate) && matchF(r.item, sf.item) && matchF(r.qty.toFixed(2), sf.qty) && matchF(r.rate, sf.rate) && matchF(r.amount, sf.amount) && matchF(r.marka ?? "", sf.marka) && matchF(r.status, sf.status))
                         .map((r) => r.id!);
                       toggleAll(filtered);
                     }} className="p-0.5 hover:text-foreground transition-colors">
@@ -1820,14 +1835,14 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                   <th className="px-4 py-4 font-semibold text-right">Qty</th>
                   <th className="px-4 py-4 font-semibold text-right">Rate</th>
                   <th className="px-4 py-4 font-semibold text-right">Amount</th>
-                  <th className="px-4 py-4 font-semibold">Bill Date</th>
+                  <th className="px-4 py-4 font-semibold">Marka</th>
                   {activeTab === "pending" && <th className="px-4 py-4 font-semibold text-center">Age</th>}
                   <th className="px-4 py-4 font-semibold text-center">Status</th>
                   <th className="px-4 py-4 font-semibold text-center">Actions</th>
                 </tr>
                 <tr className="bg-muted/30">
                   <th className="px-3 py-1.5" />
-                  {(["saleDate","item","qty","rate","amount","billDate","status"] as const).map((col) => (
+                  {(["saleDate","item","qty","rate","amount","marka","status"] as const).map((col) => (
                     <th key={col} className="px-2 py-1.5 font-normal">
                       <input type="text" placeholder="Search…" value={sf[col]} onChange={(e) => setSf((p) => ({ ...p, [col]: e.target.value }))}
                         className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
@@ -1840,7 +1855,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
               <tbody className="divide-y divide-border">
                 {data.salesRows
                   .filter((r) => activeTab === "pending" ? r.status === "Pending" : true)
-                  .filter((r) => matchF(formatDate(r.saleDate), sf.saleDate) && matchF(r.item, sf.item) && matchF(r.qty.toFixed(2), sf.qty) && matchF(r.rate, sf.rate) && matchF(r.amount, sf.amount) && matchF(r.purchaseBillDate ? formatDate(r.purchaseBillDate) : "", sf.billDate) && matchF(r.status, sf.status))
+                  .filter((r) => matchF(formatDate(r.saleDate), sf.saleDate) && matchF(r.item, sf.item) && matchF(r.qty.toFixed(2), sf.qty) && matchF(r.rate, sf.rate) && matchF(r.amount, sf.amount) && matchF(r.marka ?? "", sf.marka) && matchF(r.status, sf.status))
                   .map((row) => {
                     const days = row.status === "Pending" ? daysSince(row.saleDate) : 0;
                     const hasLotInfo = !!(row.kpNo || row.farmerName || row.village);
@@ -1856,12 +1871,18 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                         <td className="px-4 py-3 text-right">{row.qty.toFixed(2)}</td>
                         <td className="px-4 py-3 text-right">{row.rate}</td>
                         <td className="px-4 py-3 text-right font-medium">{formatCurrency(row.amount)}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{row.purchaseBillDate ? formatDate(row.purchaseBillDate) : "—"}</td>
+                        <td className="px-4 py-3">
+                          {row.marka ? (
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{row.marka}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
                         {activeTab === "pending" && (
                           <td className="px-4 py-3 text-center">
                             {row.status === "Pending" && (
                               <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full",
-                                days > 30 ? "bg-destructive/20 text-destructive" : days > 14 ? "bg-amber-500/20 text-amber-400" : "bg-muted text-muted-foreground")}>
+                                days >= 45 ? "bg-destructive/20 text-destructive" : days >= 30 ? "bg-amber-500/20 text-amber-400" : "bg-muted text-muted-foreground")}>
                                 {days}d
                               </span>
                             )}
@@ -1897,7 +1918,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                   })}
                 {data.salesRows
                   .filter((r) => activeTab === "pending" ? r.status === "Pending" : true)
-                  .filter((r) => matchF(formatDate(r.saleDate), sf.saleDate) && matchF(r.item, sf.item) && matchF(r.qty.toFixed(2), sf.qty) && matchF(r.rate, sf.rate) && matchF(r.amount, sf.amount) && matchF(r.purchaseBillDate ? formatDate(r.purchaseBillDate) : "", sf.billDate) && matchF(r.status, sf.status)).length === 0 && (
+                  .filter((r) => matchF(formatDate(r.saleDate), sf.saleDate) && matchF(r.item, sf.item) && matchF(r.qty.toFixed(2), sf.qty) && matchF(r.rate, sf.rate) && matchF(r.amount, sf.amount) && matchF(r.marka ?? "", sf.marka) && matchF(r.status, sf.status)).length === 0 && (
                   <tr><td colSpan={activeTab === "pending" ? 10 : 9} className="px-6 py-10 text-center text-muted-foreground">No records found</td></tr>
                 )}
               </tbody>
@@ -1912,7 +1933,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                   <th className="px-3 py-4 w-8">
                     <button onClick={() => {
                       const filtered = data.purchaseRows.filter((r) => r.status !== "Matched")
-                        .filter((r) => matchF(formatDate(r.billDate), pf.billDate) && matchF(formatDate(r.purchaseDate), pf.purchaseDate) && matchF(r.item, pf.item) && matchF(r.qty.toFixed(2), pf.qty) && matchF(r.rate, pf.rate) && matchF(r.amount, pf.amount) && matchF(r.status, pf.status))
+                        .filter((r) => matchF(formatDate(r.billDate), pf.billDate) && matchF(formatDate(r.purchaseDate), pf.purchaseDate) && matchF(r.item, pf.item) && matchF(r.qty.toFixed(2), pf.qty) && matchF(r.rate, pf.rate) && matchF(r.amount, pf.amount) && matchF(r.marka ?? "", pf.marka))
                         .map((r) => r.id!);
                       toggleAll(filtered);
                     }} className="p-0.5 hover:text-foreground transition-colors">
@@ -1925,12 +1946,12 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                   <th className="px-4 py-4 font-semibold text-right">Qty</th>
                   <th className="px-4 py-4 font-semibold text-right">Rate</th>
                   <th className="px-4 py-4 font-semibold text-right">Amount</th>
-                  <th className="px-4 py-4 font-semibold text-center">Status</th>
+                  <th className="px-4 py-4 font-semibold">Marka</th>
                   <th className="px-4 py-4 font-semibold text-center">Actions</th>
                 </tr>
                 <tr className="bg-muted/30">
                   <th className="px-3 py-1.5" />
-                  {(["billDate","purchaseDate","item","qty","rate","amount","status"] as const).map((col) => (
+                  {(["billDate","purchaseDate","item","qty","rate","amount","marka"] as const).map((col) => (
                     <th key={col} className="px-2 py-1.5 font-normal">
                       <input type="text" placeholder="Search…" value={pf[col]} onChange={(e) => setPf((p) => ({ ...p, [col]: e.target.value }))}
                         className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
@@ -1942,7 +1963,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
               <tbody className="divide-y divide-border">
                 {data.purchaseRows
                   .filter((r) => r.status !== "Matched")
-                  .filter((r) => matchF(formatDate(r.billDate), pf.billDate) && matchF(formatDate(r.purchaseDate), pf.purchaseDate) && matchF(r.item, pf.item) && matchF(r.qty.toFixed(2), pf.qty) && matchF(r.rate, pf.rate) && matchF(r.amount, pf.amount) && matchF(r.status, pf.status))
+                  .filter((r) => matchF(formatDate(r.billDate), pf.billDate) && matchF(formatDate(r.purchaseDate), pf.purchaseDate) && matchF(r.item, pf.item) && matchF(r.qty.toFixed(2), pf.qty) && matchF(r.rate, pf.rate) && matchF(r.amount, pf.amount) && matchF(r.marka ?? "", pf.marka))
                   .map((row) => {
                     const hasNote = !!notes[String(row.id)];
                     return (
@@ -1958,7 +1979,13 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                         <td className="px-4 py-3 text-right">{row.qty.toFixed(2)}</td>
                         <td className="px-4 py-3 text-right">{row.rate}</td>
                         <td className="px-4 py-3 text-right font-medium">{formatCurrency(row.amount)}</td>
-                        <td className="px-4 py-3 text-center"><StatusBadge status={row.status} /></td>
+                        <td className="px-4 py-3">
+                          {row.marka ? (
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{row.marka}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-center space-x-1">
                             <button onClick={() => setEditPurchaseRow(row)} disabled={!!deletingId}
@@ -1984,7 +2011,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                     );
                   })}
                 {data.purchaseRows.filter((r) => r.status !== "Matched")
-                  .filter((r) => matchF(formatDate(r.billDate), pf.billDate) && matchF(formatDate(r.purchaseDate), pf.purchaseDate) && matchF(r.item, pf.item) && matchF(r.qty.toFixed(2), pf.qty) && matchF(r.rate, pf.rate) && matchF(r.amount, pf.amount) && matchF(r.status, pf.status)).length === 0 && (
+                  .filter((r) => matchF(formatDate(r.billDate), pf.billDate) && matchF(formatDate(r.purchaseDate), pf.purchaseDate) && matchF(r.item, pf.item) && matchF(r.qty.toFixed(2), pf.qty) && matchF(r.rate, pf.rate) && matchF(r.amount, pf.amount) && matchF(r.marka ?? "", pf.marka)).length === 0 && (
                   <tr><td colSpan={9} className="px-6 py-10 text-center text-muted-foreground">All purchase records matched</td></tr>
                 )}
               </tbody>
@@ -2254,14 +2281,14 @@ export default function Dashboard() {
                                     ))}
                                   </tbody>
                                 </table>
-                                <p className="text-[11px] text-muted-foreground/70">Date format: DD/MM/YYYY or YYYY-MM-DD · KP No., Farmer Name, Village are optional</p>
+                                <p className="text-[11px] text-muted-foreground/70">Date format: DD/MM/YYYY or YYYY-MM-DD · Marka, KP No., Farmer Name, Village are optional</p>
                               </div>
                               <div className="rounded-xl border border-border bg-white/5 p-4 space-y-2">
                                 <p className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center space-x-1.5"><FileSpreadsheet className="w-3.5 h-3.5 text-primary" /><span>Purchase Bill — Required Columns</span></p>
                                 <table className="w-full text-xs text-muted-foreground">
                                   <thead><tr className="border-b border-border/50"><th className="text-left py-1 pr-3 font-semibold text-foreground/70">Column Header</th><th className="text-left py-1 font-semibold text-foreground/70">Example</th></tr></thead>
                                   <tbody className="divide-y divide-border/30">
-                                    {[["Date / Bill Date","20/04/2025"],["Purchase Date","15/04/2025"],["Item / Commodity","Onion"],["Qty (QTL)","120.50"],["Rate","850"],["Amount","102425"]].map(([col,ex]) => (
+                                    {[["Date / Bill Date","20/04/2025"],["Purchase Date","15/04/2025"],["Item / Commodity","Onion"],["Qty (QTL)","120.50"],["Rate","850"],["Amount","102425"],["Marka (optional)","Nashik Red"]].map(([col,ex]) => (
                                       <tr key={col}><td className="py-1 pr-3 font-medium text-foreground/80">{col}</td><td className="py-1 text-muted-foreground">{ex}</td></tr>
                                     ))}
                                   </tbody>

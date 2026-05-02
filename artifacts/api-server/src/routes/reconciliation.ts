@@ -364,9 +364,9 @@ router.post("/settings/reset-delete-password", async (req: Request, res: Respons
 router.post("/records/sale", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
   const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
-  const { saleDate, item, qty, rate, amount, kpNo, farmerName, village } = req.body as {
+  const { saleDate, item, qty, rate, amount, kpNo, farmerName, village, marka } = req.body as {
     saleDate: string; item: string; qty: number; rate: number; amount: number;
-    kpNo?: string; farmerName?: string; village?: string;
+    kpNo?: string; farmerName?: string; village?: string; marka?: string;
   };
   if (!saleDate || !item || !qty || !rate || !amount) {
     res.status(400).json({ error: "All fields required: saleDate, item, qty, rate, amount" }); return;
@@ -379,6 +379,7 @@ router.post("/records/sale", async (req: Request, res: Response) => {
       kpNo: kpNo?.trim() || undefined,
       farmerName: farmerName?.trim() || undefined,
       village: village?.trim() || undefined,
+      marka: marka?.trim() || undefined,
       status: "Pending", purchaseBillDate: null,
     });
     res.json(await runMatchingForUser(authedReq, data));
@@ -394,9 +395,9 @@ router.put("/records/sale/:id", async (req: Request, res: Response) => {
   const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id." }); return; }
-  const { saleDate, item, qty, rate, amount, kpNo, farmerName, village } = req.body as {
+  const { saleDate, item, qty, rate, amount, kpNo, farmerName, village, marka } = req.body as {
     saleDate?: string; item?: string; qty?: number; rate?: number; amount?: number;
-    kpNo?: string; farmerName?: string; village?: string;
+    kpNo?: string; farmerName?: string; village?: string; marka?: string;
   };
   try {
     const data = await getDataFromDrive(authedReq);
@@ -410,6 +411,7 @@ router.put("/records/sale/:id", async (req: Request, res: Response) => {
     if (kpNo !== undefined) rec.kpNo = kpNo.trim() || undefined;
     if (farmerName !== undefined) rec.farmerName = farmerName.trim() || undefined;
     if (village !== undefined) rec.village = village.trim() || undefined;
+    if (marka !== undefined) rec.marka = marka.trim() || undefined;
     res.json(await runMatchingForUser(authedReq, data));
   } catch (err) {
     req.log.error({ err }, "Failed to edit sale record");
@@ -421,13 +423,13 @@ router.put("/records/sale/:id", async (req: Request, res: Response) => {
 router.post("/records/purchase", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Please log in." }); return; }
   const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
-  const { billDate, purchaseDate, item, qty, rate, amount } = req.body as { billDate: string; purchaseDate: string; item: string; qty: number; rate: number; amount: number };
+  const { billDate, purchaseDate, item, qty, rate, amount, marka } = req.body as { billDate: string; purchaseDate: string; item: string; qty: number; rate: number; amount: number; marka?: string };
   if (!billDate || !purchaseDate || !item || !qty || !rate || !amount) {
     res.status(400).json({ error: "All fields required: billDate, purchaseDate, item, qty, rate, amount" }); return;
   }
   try {
     const data = await getDataFromDrive(authedReq);
-    data.purchases.push({ id: data.nextPurchaseId++, billDate, purchaseDate, item: String(item).trim(), qty: String(qty), rate: String(rate), amount: String(amount), status: "Unmatched" });
+    data.purchases.push({ id: data.nextPurchaseId++, billDate, purchaseDate, item: String(item).trim(), qty: String(qty), rate: String(rate), amount: String(amount), marka: marka?.trim() || undefined, status: "Unmatched" });
     res.json(await runMatchingForUser(authedReq, data));
   } catch (err) {
     req.log.error({ err }, "Failed to add purchase record");
@@ -441,7 +443,7 @@ router.put("/records/purchase/:id", async (req: Request, res: Response) => {
   const authedReq = req as Request & { sessionId: string; sessionData: SessionData };
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id." }); return; }
-  const { billDate, purchaseDate, item, qty, rate, amount } = req.body as { billDate?: string; purchaseDate?: string; item?: string; qty?: number; rate?: number; amount?: number };
+  const { billDate, purchaseDate, item, qty, rate, amount, marka } = req.body as { billDate?: string; purchaseDate?: string; item?: string; qty?: number; rate?: number; amount?: number; marka?: string };
   try {
     const data = await getDataFromDrive(authedReq);
     const rec = data.purchases.find((p) => p.id === id);
@@ -452,6 +454,7 @@ router.put("/records/purchase/:id", async (req: Request, res: Response) => {
     if (qty !== undefined) rec.qty = String(qty);
     if (rate !== undefined) rec.rate = String(rate);
     if (amount !== undefined) rec.amount = String(amount);
+    if (marka !== undefined) rec.marka = marka.trim() || undefined;
     res.json(await runMatchingForUser(authedReq, data));
   } catch (err) {
     req.log.error({ err }, "Failed to edit purchase record");
