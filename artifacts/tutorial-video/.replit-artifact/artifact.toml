@@ -1,0 +1,31 @@
+kind = "video"
+previewPath = "/tutorial-video/"
+title = "Stock Reconciler Tutorial"
+version = "1.0.0"
+id = "artifacts/tutorial-video"
+router = "path"
+
+[[integratedSkills]]
+name = "video-js"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/tutorial-video/" ]
+localPort = 24418
+
+[services.development]
+run = "pnpm --filter @workspace/tutorial-video run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/tutorial-video", "run", "build" ]
+publicDir = "artifacts/tutorial-video/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24418"
+BASE_PATH = "/tutorial-video/"
