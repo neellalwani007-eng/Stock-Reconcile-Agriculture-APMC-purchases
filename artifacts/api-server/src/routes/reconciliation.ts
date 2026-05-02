@@ -110,8 +110,9 @@ async function saveDataToDrive(
 
 async function runMatchingForUser(
   req: Request & { sessionId: string; sessionData: SessionData },
+  preloadedData?: DriveUserData,
 ): Promise<ReconciliationResult> {
-  const data = await getDataFromDrive(req);
+  const data = preloadedData ?? await getDataFromDrive(req);
 
   for (const s of data.sales) {
     if (s.status === "Matched") {
@@ -375,8 +376,7 @@ router.post("/records/sale", async (req: Request, res: Response) => {
       village: village?.trim() || undefined,
       status: "Pending", purchaseBillDate: null,
     });
-    await saveDataToDrive(authedReq, data);
-    res.json(await runMatchingForUser(authedReq));
+    res.json(await runMatchingForUser(authedReq, data));
   } catch (err) {
     req.log.error({ err }, "Failed to add sale record");
     handleDriveError(err, res, "Failed to add sale record.");
@@ -405,8 +405,7 @@ router.put("/records/sale/:id", async (req: Request, res: Response) => {
     if (kpNo !== undefined) rec.kpNo = kpNo.trim() || undefined;
     if (farmerName !== undefined) rec.farmerName = farmerName.trim() || undefined;
     if (village !== undefined) rec.village = village.trim() || undefined;
-    await saveDataToDrive(authedReq, data);
-    res.json(await runMatchingForUser(authedReq));
+    res.json(await runMatchingForUser(authedReq, data));
   } catch (err) {
     req.log.error({ err }, "Failed to edit sale record");
     handleDriveError(err, res, "Failed to edit sale record.");
@@ -424,8 +423,7 @@ router.post("/records/purchase", async (req: Request, res: Response) => {
   try {
     const data = await getDataFromDrive(authedReq);
     data.purchases.push({ id: data.nextPurchaseId++, billDate, purchaseDate, item: String(item).trim(), qty: String(qty), rate: String(rate), amount: String(amount), status: "Unmatched" });
-    await saveDataToDrive(authedReq, data);
-    res.json(await runMatchingForUser(authedReq));
+    res.json(await runMatchingForUser(authedReq, data));
   } catch (err) {
     req.log.error({ err }, "Failed to add purchase record");
     handleDriveError(err, res, "Failed to add purchase record.");
@@ -449,8 +447,7 @@ router.put("/records/purchase/:id", async (req: Request, res: Response) => {
     if (qty !== undefined) rec.qty = String(qty);
     if (rate !== undefined) rec.rate = String(rate);
     if (amount !== undefined) rec.amount = String(amount);
-    await saveDataToDrive(authedReq, data);
-    res.json(await runMatchingForUser(authedReq));
+    res.json(await runMatchingForUser(authedReq, data));
   } catch (err) {
     req.log.error({ err }, "Failed to edit purchase record");
     handleDriveError(err, res, "Failed to edit purchase record.");
@@ -497,8 +494,7 @@ router.delete("/records/sale/:id", async (req: Request, res: Response) => {
       if (linked) linked.status = "Unmatched";
     }
     data.sales.splice(idx, 1);
-    await saveDataToDrive(authedReq, data);
-    res.json(await runMatchingForUser(authedReq));
+    res.json(await runMatchingForUser(authedReq, data));
   } catch (err) {
     req.log.error({ err }, "Failed to delete sale record");
     handleDriveError(err, res, "Failed to delete sale record.");
@@ -516,8 +512,7 @@ router.delete("/records/purchase/:id", async (req: Request, res: Response) => {
     const idx = data.purchases.findIndex((p) => p.id === id);
     if (idx === -1) { res.status(404).json({ error: "Record not found." }); return; }
     data.purchases.splice(idx, 1);
-    await saveDataToDrive(authedReq, data);
-    res.json(await runMatchingForUser(authedReq));
+    res.json(await runMatchingForUser(authedReq, data));
   } catch (err) {
     req.log.error({ err }, "Failed to delete purchase record");
     handleDriveError(err, res, "Failed to delete purchase record.");
@@ -546,8 +541,7 @@ router.delete("/records/bulk", async (req: Request, res: Response) => {
     } else {
       data.purchases = data.purchases.filter((p) => !idSet.has(p.id));
     }
-    await saveDataToDrive(authedReq, data);
-    res.json(await runMatchingForUser(authedReq));
+    res.json(await runMatchingForUser(authedReq, data));
   } catch (err) {
     req.log.error({ err }, "Failed to bulk delete records");
     handleDriveError(err, res, "Failed to delete records.");
@@ -581,8 +575,7 @@ router.delete("/records/date", async (req: Request, res: Response) => {
     } else {
       data.purchases = data.purchases.filter((p) => !dateSet.has(p.billDate));
     }
-    await saveDataToDrive(authedReq, data);
-    res.json(await runMatchingForUser(authedReq));
+    res.json(await runMatchingForUser(authedReq, data));
   } catch (err) {
     req.log.error({ err }, "Failed to delete records by date");
     handleDriveError(err, res, "Failed to delete records.");

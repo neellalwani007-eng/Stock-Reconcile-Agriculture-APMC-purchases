@@ -1142,11 +1142,11 @@ function ManualMatchModal({ sale, allData, onClose, onSuccess }: {
       let score = 0;
       if (p.item.trim().toLowerCase() === saleItemNorm) score++;
       if (p.purchaseDate === sale.saleDate) score++;
-      if (p.qty === sale.qty) score++;
-      if (p.rate === sale.rate) score++;
+      if (Math.abs(p.qty - sale.qty) <= 0.001) score++;
+      if (Math.abs(p.rate - sale.rate) <= 0.001) score++;
       if (Math.abs(p.amount - sale.amount) <= 0.02) score++;
       return { ...p, matchScore: score };
-    }).filter((p) => p.matchScore >= 3).sort((a, b) => b.matchScore - a.matchScore);
+    }).filter((p) => p.matchScore >= 2).sort((a, b) => b.matchScore - a.matchScore);
   }, [unmatchedPurchases, sale]);
 
   const filteredPurchases = unmatchedPurchases.filter((p) =>
