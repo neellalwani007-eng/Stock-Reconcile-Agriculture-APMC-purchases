@@ -365,10 +365,10 @@ export function buildResult(salesRows: SaleRow[], purchaseRows: PurchaseRow[]): 
 export function buildUpdatedSalesExcel(result: ReconciliationResult): Buffer {
   const wb = XLSX.utils.book_new();
   const data = [
-    ["Sale Date", "Item", "Qty (QTL)", "Rate", "Amount", "KP No.", "Farmer Name", "Village", "Purchase Bill Date", "Status"],
+    ["Sale Date", "Item", "Qty (QTL)", "Rate", "Amount", "Marka", "KP No.", "Farmer Name", "Village", "Purchase Bill Date", "Status"],
     ...result.salesRows.map((r) => [
       r.saleDate, r.item, r.qty, r.rate, r.amount,
-      r.kpNo ?? "", r.farmerName ?? "", r.village ?? "",
+      r.marka ?? "", r.kpNo ?? "", r.farmerName ?? "", r.village ?? "",
       r.purchaseBillDate ?? "", r.status,
     ]),
   ];
@@ -380,10 +380,10 @@ export function buildPendingPavatiExcel(result: ReconciliationResult): Buffer {
   const wb = XLSX.utils.book_new();
   const pending = result.salesRows.filter((r) => r.status === "Pending");
   const data = [
-    ["Sale Date", "Commodity", "Quantity (QTL)", "Rate", "Amount", "KP No.", "Farmer Name", "Village"],
+    ["Sale Date", "Commodity", "Quantity (QTL)", "Rate", "Amount", "Marka", "KP No.", "Farmer Name", "Village"],
     ...pending.map((r) => [
       r.saleDate, r.item, r.qty, r.rate, r.amount,
-      r.kpNo ?? "", r.farmerName ?? "", r.village ?? "",
+      r.marka ?? "", r.kpNo ?? "", r.farmerName ?? "", r.village ?? "",
     ]),
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Pending Pavati");
@@ -394,8 +394,8 @@ export function buildDatewiseReportExcel(result: ReconciliationResult): Buffer {
   const wb = XLSX.utils.book_new();
   const sorted = [...result.salesRows].sort((a, b) => a.saleDate.localeCompare(b.saleDate));
   const data = [
-    ["Sale Date", "Commodity", "Qty (QTL)", "Rate", "Amount", "Purchase Bill Date", "Status"],
-    ...sorted.map((r) => [r.saleDate, r.item, r.qty, r.rate, r.amount, r.purchaseBillDate ?? "", r.status]),
+    ["Sale Date", "Commodity", "Qty (QTL)", "Rate", "Amount", "Marka", "Purchase Bill Date", "Status"],
+    ...sorted.map((r) => [r.saleDate, r.item, r.qty, r.rate, r.amount, r.marka ?? "", r.purchaseBillDate ?? "", r.status]),
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Date-wise Report");
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
@@ -408,9 +408,9 @@ export function buildPurchaseExceptionsExcel(
   const wb = XLSX.utils.book_new();
   const exceptions = result.purchaseRows.filter((r) => r.status !== "Matched");
   const data = [
-    ["Bill Date", "Purchase Date", "Commodity", "Qty (QTL)", "Rate", "Amount", "Status", "Note"],
+    ["Bill Date", "Purchase Date", "Commodity", "Qty (QTL)", "Rate", "Amount", "Marka", "Status", "Note"],
     ...exceptions.map((r) => [
-      r.billDate, r.purchaseDate, r.item, r.qty, r.rate, r.amount, r.status,
+      r.billDate, r.purchaseDate, r.item, r.qty, r.rate, r.amount, r.marka ?? "", r.status,
       notes[String(r.id)] ?? "",
     ]),
   ];
