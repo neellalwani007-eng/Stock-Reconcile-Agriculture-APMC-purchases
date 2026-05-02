@@ -2395,11 +2395,25 @@ export default function Dashboard() {
                       )}
                       <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-8", !canUpload && "pointer-events-none opacity-40")}>
                         <div className="space-y-3">
-                          <label className="text-sm font-semibold text-foreground">Sales Data</label>
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-semibold text-foreground">Sales Data</label>
+                            <a href="/sales_template.xlsx" download
+                              className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors">
+                              <Download className="w-3 h-3" />
+                              Sample Format
+                            </a>
+                          </div>
                           <FileDropzone label="Sales Excel" files={salesFiles} onFilesChange={setSalesFiles} />
                         </div>
                         <div className="space-y-3">
-                          <label className="text-sm font-semibold text-foreground">Purchase Data</label>
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-semibold text-foreground">Purchase Data</label>
+                            <a href="/purchase_template.xlsx" download
+                              className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors">
+                              <Download className="w-3 h-3" />
+                              Sample Format
+                            </a>
+                          </div>
                           <FileDropzone label="Purchase Excel" files={purchaseFiles} onFilesChange={setPurchaseFiles} />
                         </div>
                       </div>
