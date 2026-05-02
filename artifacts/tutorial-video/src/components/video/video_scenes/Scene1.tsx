@@ -2,6 +2,20 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { sceneTransitions } from '@/lib/video';
 
+function AppLogo({ size = 96 }: { size?: number }) {
+  const icon = Math.round(size * 0.46);
+  return (
+    <div
+      style={{ width: size, height: size }}
+      className="bg-[#1a4731] rounded-2xl flex items-center justify-center shadow-2xl border border-white/10"
+    >
+      <svg width={icon} height={icon} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m17 4 4 4-4 4" /><path d="M3 8h18" /><path d="m7 20-4-4 4-4" /><path d="M21 16H3" />
+      </svg>
+    </div>
+  );
+}
+
 export function Scene1() {
   const [phase, setPhase] = useState(0);
 
@@ -15,23 +29,25 @@ export function Scene1() {
   }, []);
 
   return (
-    <motion.div 
-      className="absolute inset-0 flex flex-col items-center justify-center bg-[#0F172A]"
+    <motion.div
+      className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d2818]"
+      style={{ background: 'linear-gradient(to bottom, #0d2818, #1a4731 50%, #0d2818)' }}
       {...sceneTransitions.fadeBlur}
     >
       <div className="relative z-10 flex flex-col items-center text-center">
         <motion.div
-          className="w-24 h-24 mb-8 bg-[#064E3B] rounded-xl flex items-center justify-center border border-[#D97706]/30 shadow-2xl"
-          initial={{ scale: 0, rotate: -45, opacity: 0 }}
+          className="mb-8"
+          initial={{ scale: 0, rotate: -20, opacity: 0 }}
           animate={{ scale: 1, rotate: 0, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 300, damping: 20 }}
         >
-          <div className="w-12 h-12 border-4 border-[#D97706] rounded-sm flex items-center justify-center">
-            <div className="w-6 h-6 bg-[#FDFBF7] rounded-sm" />
-          </div>
+          <AppLogo size={96} />
         </motion.div>
 
-        <h1 className="text-[6vw] font-bold tracking-tight text-[#FDFBF7] leading-none mb-6" style={{ fontFamily: 'var(--font-display)' }}>
+        <h1
+          className="text-[6vw] font-bold tracking-tight text-white leading-none mb-6"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
           {'Stock Reconciler'.split('').map((char, i) => (
             <motion.span
               key={i}
@@ -46,13 +62,33 @@ export function Scene1() {
         </h1>
 
         <motion.p
-          className="text-[2vw] text-[#D97706] font-medium tracking-wide uppercase"
+          className="text-[2vw] text-[#7a9183] font-medium tracking-wide"
           initial={{ opacity: 0, filter: 'blur(10px)', y: 20 }}
           animate={phase >= 2 ? { opacity: 1, filter: 'blur(0px)', y: 0 } : { opacity: 0, filter: 'blur(10px)', y: 20 }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
         >
-          APMC Trading, Reconciled.
+          Automate reconciliation in seconds
         </motion.p>
+
+        <motion.div
+          className="mt-10 flex gap-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={phase >= 3 ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+          transition={{ duration: 0.6 }}
+        >
+          {['1-to-1 Matching', 'Per-user Data', 'Excel Export'].map((feat, i) => (
+            <motion.div
+              key={feat}
+              className="flex items-center gap-2 bg-[#122d1e] border border-[#2d4a35] rounded-xl px-4 py-2"
+              initial={{ opacity: 0, y: 10 }}
+              animate={phase >= 3 ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+              transition={{ delay: i * 0.12, duration: 0.4 }}
+            >
+              <svg className="w-4 h-4 text-[#2d9e54]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span className="text-white text-sm font-medium">{feat}</span>
+            </motion.div>
+          ))}
+        </motion.div>
       </div>
     </motion.div>
   );

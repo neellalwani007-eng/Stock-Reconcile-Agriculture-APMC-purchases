@@ -9,77 +9,95 @@ export function Scene5() {
     const timers = [
       setTimeout(() => setPhase(1), 500),
       setTimeout(() => setPhase(2), 2000),
-      setTimeout(() => setPhase(3), 4000),
+      setTimeout(() => setPhase(3), 4200),
     ];
     return () => timers.forEach(t => clearTimeout(t));
   }, []);
 
   return (
-    <motion.div 
-      className="absolute inset-0 flex flex-col items-center justify-center bg-[#0F172A]"
+    <motion.div
+      className="absolute inset-0 flex flex-col items-center justify-center px-12"
+      style={{ background: 'linear-gradient(to bottom, #0d2818, #1a4731 50%, #0d2818)' }}
       {...sceneTransitions.scaleFade}
     >
-      <div className="w-full max-w-4xl relative">
-        <h2 className="text-[#FDFBF7] text-2xl font-bold mb-6" style={{ fontFamily: 'var(--font-display)' }}>Smart Manual Matching</h2>
+      <div className="w-full max-w-3xl">
+        <h2 className="text-white text-2xl font-bold mb-6" style={{ fontFamily: 'var(--font-display)' }}>
+          Smart Manual Matching
+        </h2>
 
-        {/* Highlighted Row */}
-        <motion.div 
-          className="grid grid-cols-6 gap-4 p-4 items-center rounded-lg bg-[#1E293B] border-2 border-[#D97706] mb-8 relative z-10 shadow-[0_0_20px_rgba(217,119,6,0.2)]"
+        {/* Highlighted pending row */}
+        <motion.div
+          className="grid grid-cols-6 gap-4 px-4 py-3.5 items-center rounded-xl bg-[#122d1e] border-2 border-[#f5a41a]/60 mb-6 shadow-[0_0_24px_rgba(245,164,26,0.15)] relative z-10"
         >
-          <div className="text-[#FDFBF7]">14 Apr 25</div>
-          <div className="text-[#FDFBF7]">Maize</div>
-          <div className="text-[#FDFBF7]">100</div>
-          <div className="text-[#FDFBF7]">₹1,800</div>
-          <div className="text-[#FDFBF7]">₹1,80,000</div>
-          <div>
-            <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${phase >= 3 ? 'bg-[#064E3B] text-[#10B981] border-[#10B981]/30' : 'bg-[#78350F] text-[#F59E0B] border-[#F59E0B]/30'}`}>
-              {phase >= 3 ? 'Matched' : 'Pending'}
-            </div>
-          </div>
+          <div className="text-white text-sm">14 Apr 25</div>
+          <div className="text-white text-sm font-medium">Maize</div>
+          <div className="text-white text-sm">100</div>
+          <div className="text-white text-sm">₹1,800</div>
+          <div className="text-white text-sm">₹1,80,000</div>
+          <motion.div
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border w-fit"
+            animate={phase >= 3
+              ? { backgroundColor: 'rgba(45,158,84,0.15)', color: '#2d9e54', borderColor: 'rgba(45,158,84,0.3)' }
+              : { backgroundColor: 'rgba(245,164,26,0.12)', color: '#f5a41a', borderColor: 'rgba(245,164,26,0.3)' }
+            }
+            transition={{ duration: 0.4 }}
+          >
+            {phase >= 3 ? (
+              <><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>Matched</>
+            ) : 'Pending'}
+          </motion.div>
         </motion.div>
 
-        {/* Suggestion Panel */}
-        <motion.div 
-          className="w-3/4 ml-auto bg-[#1E293B] border border-[#475569] rounded-xl overflow-hidden shadow-2xl relative z-20"
-          initial={{ opacity: 0, y: -20, height: 0 }}
-          animate={phase >= 1 && phase < 3 ? { opacity: 1, y: 0, height: 'auto' } : { opacity: 0, y: 20, height: 0 }}
-          transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+        {/* Suggestions panel */}
+        <motion.div
+          className="bg-[#122d1e] border border-[#2d4a35] rounded-xl overflow-hidden shadow-2xl"
+          initial={{ opacity: 0, y: -16, height: 0 }}
+          animate={phase >= 1 && phase < 3
+            ? { opacity: 1, y: 0, height: 'auto' }
+            : { opacity: 0, y: 20, height: 0 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 24 }}
         >
-          <div className="bg-[#0F172A] px-4 py-3 border-b border-[#475569] text-sm font-medium text-[#94A3B8]">
+          <div className="bg-[#091a10] px-4 py-2.5 border-b border-[#2d4a35] text-xs font-semibold text-[#7a9183] uppercase tracking-wide">
             Suggested Purchase Records
           </div>
 
-          <div className="p-2 flex flex-col gap-2">
-            {/* Top Match */}
-            <div className="bg-[#0F172A]/50 border border-[#064E3B] rounded-lg p-3 relative overflow-hidden">
-              <motion.div 
-                className="absolute inset-0 bg-[#064E3B]/20"
+          <div className="p-3 flex flex-col gap-2">
+            {/* Top match */}
+            <div className="bg-[#091a10]/60 border border-[#2d9e54]/40 rounded-xl p-3 relative overflow-hidden">
+              <motion.div
+                className="absolute inset-0 bg-[#2d9e54]/8"
                 initial={{ opacity: 0 }}
                 animate={phase >= 2 ? { opacity: 1 } : { opacity: 0 }}
               />
-              <div className="flex justify-between items-center mb-2 relative z-10">
-                <span className="text-[#10B981] text-xs font-bold px-2 py-1 bg-[#064E3B] rounded border border-[#10B981]/30">4/5 Fields Match</span>
-                <span className="text-[#94A3B8] text-xs">Pur-0042</span>
+              <div className="flex justify-between items-center mb-2.5 relative z-10">
+                <span className="text-[#2d9e54] text-xs font-bold px-2.5 py-1 bg-[#2d9e54]/12 rounded-lg border border-[#2d9e54]/30">
+                  4 / 5 Fields Match
+                </span>
+                <span className="text-[#7a9183] text-xs">Pur-0042</span>
               </div>
-              <div className="grid grid-cols-4 gap-2 text-sm relative z-10">
-                <div className="text-[#FDFBF7]">14 Apr 25</div>
-                <div className="text-[#EF4444] line-through decoration-[#EF4444]">Corn</div>
-                <div className="text-[#FDFBF7]">100</div>
-                <div className="text-[#FDFBF7]">₹1,80,000</div>
+              <div className="grid grid-cols-5 gap-2 text-sm relative z-10">
+                <div className="text-white">14 Apr 25</div>
+                <div className="text-[#ef4444] line-through">Corn</div>
+                <div className="text-white">100 qtl</div>
+                <div className="text-white">₹1,800</div>
+                <div className="text-white">₹1,80,000</div>
               </div>
             </div>
 
-            {/* Second Match */}
-            <div className="bg-[#0F172A]/30 border border-[#475569] rounded-lg p-3 opacity-60">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-[#F59E0B] text-xs font-bold px-2 py-1 bg-[#78350F] rounded border border-[#F59E0B]/30">3/5 Fields Match</span>
-                <span className="text-[#94A3B8] text-xs">Pur-0089</span>
+            {/* Second match */}
+            <div className="bg-[#091a10]/40 border border-[#2d4a35] rounded-xl p-3 opacity-55">
+              <div className="flex justify-between items-center mb-2.5">
+                <span className="text-[#f5a41a] text-xs font-bold px-2.5 py-1 bg-[#f5a41a]/10 rounded-lg border border-[#f5a41a]/30">
+                  3 / 5 Fields Match
+                </span>
+                <span className="text-[#7a9183] text-xs">Pur-0089</span>
               </div>
-              <div className="grid grid-cols-4 gap-2 text-sm">
-                <div className="text-[#EF4444]">12 Apr 25</div>
-                <div className="text-[#FDFBF7]">Maize</div>
-                <div className="text-[#FDFBF7]">100</div>
-                <div className="text-[#EF4444]">₹1,75,000</div>
+              <div className="grid grid-cols-5 gap-2 text-sm">
+                <div className="text-[#ef4444]">12 Apr 25</div>
+                <div className="text-white">Maize</div>
+                <div className="text-white">100 qtl</div>
+                <div className="text-[#ef4444]">₹1,750</div>
+                <div className="text-[#ef4444]">₹1,75,000</div>
               </div>
             </div>
           </div>
