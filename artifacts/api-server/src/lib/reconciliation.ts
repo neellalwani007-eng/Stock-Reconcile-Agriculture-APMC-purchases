@@ -51,6 +51,11 @@ export interface MatchUpdate {
   purchaseBillDate: string;
 }
 
+const MONTH_ABBR: Record<string, string> = {
+  jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
+  jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12",
+};
+
 export function normalizeDate(val: unknown): string {
   if (val === null || val === undefined || val === "") return "";
   if (typeof val === "number") {
@@ -62,6 +67,8 @@ export function normalizeDate(val: unknown): string {
   }
   if (typeof val === "string") {
     const trimmed = val.trim();
+
+    // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
     const ddmmyyyy = trimmed.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
     if (ddmmyyyy) {
       const day = ddmmyyyy[1].padStart(2, "0");
@@ -69,6 +76,18 @@ export function normalizeDate(val: unknown): string {
       const year = ddmmyyyy[3];
       return `${year}-${month}-${day}`;
     }
+
+    // DD/MM/YY or DD-MM-YY (2-digit year)
+    const ddmmyy = trimmed.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})$/);
+    if (ddmmyy) {
+      const day = ddmmyy[1].padStart(2, "0");
+      const month = ddmmyy[2].padStart(2, "0");
+      const yy = parseInt(ddmmyy[3], 10);
+      const year = yy >= 50 ? `19${ddmmyy[3]}` : `20${ddmmyy[3].padStart(2,"0")}`;
+      return `${year}-${month}-${day}`;
+    }
+
+    // YYYY/MM/DD or YYYY-MM-DD
     const isoLike = trimmed.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
     if (isoLike) {
       const year = isoLike[1];
@@ -76,6 +95,31 @@ export function normalizeDate(val: unknown): string {
       const day = isoLike[3].padStart(2, "0");
       return `${year}-${month}-${day}`;
     }
+
+    // DD-MMM-YYYY or DD/MMM/YYYY  e.g. "01-Apr-2026" or "1-Apr-26"
+    const ddMmmYyyy = trimmed.match(/^(\d{1,2})[\/\-\. ]([A-Za-z]{3,9})[\/\-\. ](\d{2,4})$/);
+    if (ddMmmYyyy) {
+      const monthNum = MONTH_ABBR[ddMmmYyyy[2].toLowerCase().slice(0, 3)];
+      if (monthNum) {
+        const day = ddMmmYyyy[1].padStart(2, "0");
+        const rawYear = ddMmmYyyy[3];
+        const year = rawYear.length === 2
+          ? (parseInt(rawYear, 10) >= 50 ? `19${rawYear}` : `20${rawYear}`)
+          : rawYear;
+        return `${year}-${monthNum}-${day}`;
+      }
+    }
+
+    // MMM DD, YYYY  e.g. "Apr 01, 2026" or "April 1 2026"
+    const mmmDdYyyy = trimmed.match(/^([A-Za-z]{3,9})[\. ](\d{1,2})[,\. ]+(\d{4})$/);
+    if (mmmDdYyyy) {
+      const monthNum = MONTH_ABBR[mmmDdYyyy[1].toLowerCase().slice(0, 3)];
+      if (monthNum) {
+        const day = mmmDdYyyy[2].padStart(2, "0");
+        return `${mmmDdYyyy[3]}-${monthNum}-${day}`;
+      }
+    }
+
     return trimmed;
   }
   return String(val);
@@ -147,8 +191,10 @@ export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
     if (!item) continue;
     const qty = normalizeNum(r[qtycol]);
     if (qty === 0) continue;
+    const saleDate = normalizeDate(r[datecol]);
+    if (!saleDate) continue;
     rows.push({
-      saleDate: normalizeDate(r[datecol]),
+      saleDate,
       item: toTitleCase(String(r[itemcol] ?? "").trim()),
       qty,
       rate: normalizeNum(r[ratecol]),
@@ -186,8 +232,10 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
     if (!item) continue;
     const qty = normalizeNum(r[qtycol]);
     if (qty === 0) continue;
+    const billDate = normalizeDate(r[billdatecol]);
+    if (!billDate) continue;
     rows.push({
-      billDate: normalizeDate(r[billdatecol]),
+      billDate,
       purchaseDate: normalizeDate(r[effectivePurDateCol]),
       item: toTitleCase(String(r[itemcol] ?? "").trim()),
       qty,

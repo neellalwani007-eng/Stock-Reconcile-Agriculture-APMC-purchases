@@ -89,8 +89,9 @@ function daysSince(dateStr: string): number {
 }
 
 function filterResultByFY(result: ReconciliationResult, fy: string): ReconciliationResult {
-  const sales = result.salesRows.filter((r) => getFYFromDate(r.saleDate) === fy);
-  const purchases = result.purchaseRows.filter((r) => getFYFromDate(r.billDate) === fy);
+  // Rows with empty/unparseable dates are always included so the user can see and delete them
+  const sales = result.salesRows.filter((r) => !r.saleDate || getFYFromDate(r.saleDate) === fy);
+  const purchases = result.purchaseRows.filter((r) => !r.billDate || getFYFromDate(r.billDate) === fy);
   const matchedCount = sales.filter((r) => r.status === "Matched").length;
   const pendingCount = sales.filter((r) => r.status === "Pending").length;
   const unmatchedPurchaseCount = purchases.filter((r) => r.status !== "Matched").length;

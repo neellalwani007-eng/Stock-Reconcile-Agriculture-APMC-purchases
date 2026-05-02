@@ -195,9 +195,14 @@ router.post(
           const dateItemsInFile = new Set(
             allSaleRows.map((r) => `${r.saleDate}|${r.item.trim().toLowerCase()}`)
           );
-          data.sales = data.sales.filter(
-            (s) => !dateItemsInFile.has(`${s.saleDate}|${s.item.trim().toLowerCase()}`)
-          );
+          // Also collect item names so we can purge any stale empty-date records for those items
+          const itemsInFile = new Set(allSaleRows.map((r) => r.item.trim().toLowerCase()));
+          data.sales = data.sales.filter((s) => {
+            if (dateItemsInFile.has(`${s.saleDate}|${s.item.trim().toLowerCase()}`)) return false;
+            // Remove old empty-date records for the same items (stale data from pre-fix uploads)
+            if (!s.saleDate && itemsInFile.has(s.item.trim().toLowerCase())) return false;
+            return true;
+          });
           for (const r of allSaleRows) {
             data.sales.push({
               id: data.nextSaleId++,
