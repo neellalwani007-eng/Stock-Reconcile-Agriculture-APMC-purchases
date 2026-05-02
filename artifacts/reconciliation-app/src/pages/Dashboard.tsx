@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRightLeft, CheckCircle2, AlertCircle, Download, LayoutDashboard, Clock,
   AlertTriangle, Loader2, RefreshCcw, BarChart3, Trash2, X, Upload, FileSpreadsheet,
-  Plus, LogOut, User, CalendarX, ChevronDown, Edit2, Link2, HelpCircle, FileX,
+  Plus, LogOut, User, CalendarX, ChevronDown, Edit2, Link2, FileX,
   CheckSquare, Square, TrendingUp, CheckCheck, MessageSquare, Info, Lock, Key,
 } from "lucide-react";
 import {
@@ -37,21 +37,6 @@ interface FileImportResult {
   error?: string;
 }
 
-interface WhyReason {
-  field: string;
-  saleValue: string;
-  purchaseValue: string;
-  ok: boolean;
-}
-
-interface WhyCandidate {
-  purchaseId?: number;
-  saleId?: number;
-  billDate?: string;
-  saleDate?: string;
-  reasons: WhyReason[];
-  matchScore: number;
-}
 
 /* ── Constants & helpers ─────────────────────────────────────────────────────── */
 const BASE = import.meta.env.BASE_URL.replace(/\/+$/, "");
@@ -1032,93 +1017,6 @@ function EditPurchaseModal({ row, onClose, onSuccess }: { row: PurchaseRow; onCl
   );
 }
 
-/* ── Why Unmatched Modal ─────────────────────────────────────────────────────── */
-function WhyUnmatchedModal({ type, row, onClose }: {
-  type: "sale" | "purchase";
-  row: SaleRow | PurchaseRow;
-  onClose: () => void;
-}) {
-  const [loading, setLoading] = useState(true);
-  const [result, setResult] = useState<{ globalReason?: string; candidates: WhyCandidate[] } | null>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    apiJson<{ globalReason?: string; candidates: WhyCandidate[] }>("/why-unmatched", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, id: row.id }),
-    }).then((d) => setResult(d)).catch((e) => setError(e.message)).finally(() => setLoading(false));
-  }, []);
-
-  const label = type === "sale" ? `Sale · ${formatDate((row as SaleRow).saleDate)}` : `Purchase · ${formatDate((row as PurchaseRow).billDate)}`;
-
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-        className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-2xl max-h-[85vh] flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-amber-500/10 rounded-lg"><HelpCircle className="w-5 h-5 text-amber-500" /></div>
-            <div>
-              <h3 className="font-bold text-lg text-foreground">Why Didn't It Match?</h3>
-              <p className="text-xs text-muted-foreground">{label} · {row.item} · Qty {row.qty}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
-        </div>
-        <div className="overflow-y-auto flex-1 p-6 space-y-4">
-          {loading && <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>}
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {result?.globalReason && (
-            <div className="p-4 bg-muted/50 rounded-xl text-sm text-muted-foreground flex items-start space-x-2">
-              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /><span>{result.globalReason}</span>
-            </div>
-          )}
-          {result && result.candidates.length === 0 && !result.globalReason && (
-            <p className="text-sm text-muted-foreground text-center py-8">No candidate records found.</p>
-          )}
-          {result?.candidates.map((c, idx) => (
-            <div key={idx} className="border border-border rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border">
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
-                  {type === "sale" ? `Purchase Candidate #${idx + 1} · Bill Date: ${formatDate(c.billDate!)}` : `Sale Candidate #${idx + 1} · Sale Date: ${formatDate(c.saleDate!)}`}
-                </span>
-                <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", c.matchScore >= 4 ? "bg-amber-500/20 text-amber-400" : c.matchScore >= 2 ? "bg-yellow-500/20 text-yellow-400" : "bg-destructive/20 text-destructive")}>
-                  {c.matchScore}/5 fields match
-                </span>
-              </div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-muted-foreground border-b border-border/50">
-                    <th className="px-4 py-2 text-left font-medium">Field</th>
-                    <th className="px-4 py-2 text-left font-medium">{type === "sale" ? "Sale Value" : "Purchase Value"}</th>
-                    <th className="px-4 py-2 text-left font-medium">{type === "sale" ? "Purchase Value" : "Sale Value"}</th>
-                    <th className="px-4 py-2 text-center font-medium">Match</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/30">
-                  {c.reasons.map((r, ri) => (
-                    <tr key={ri} className={cn(!r.ok && "bg-destructive/5")}>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{r.field}</td>
-                      <td className="px-4 py-2.5 text-foreground">{r.saleValue}</td>
-                      <td className="px-4 py-2.5 text-foreground">{r.purchaseValue}</td>
-                      <td className="px-4 py-2.5 text-center">
-                        {r.ok ? <CheckCircle2 className="w-4 h-4 text-green-400 inline" /> : <X className="w-4 h-4 text-destructive inline" />}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
-        </div>
-        <div className="p-6 pt-0 shrink-0">
-          <button onClick={onClose} className="w-full px-4 py-3 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium">Close</button>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
 /* ── Manual Match Modal ──────────────────────────────────────────────────────── */
 function ManualMatchModal({ sale, allData, onClose, onSuccess }: {
   sale: SaleRow;
@@ -1711,7 +1609,6 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
   const [editPurchaseRow, setEditPurchaseRow] = useState<PurchaseRow | null>(null);
   const [manualMatchSale, setManualMatchSale] = useState<SaleRow | null>(null);
   const [manualMatchPurchase, setManualMatchPurchase] = useState<PurchaseRow | null>(null);
-  const [whyUnmatched, setWhyUnmatched] = useState<{ type: "sale" | "purchase"; row: SaleRow | PurchaseRow } | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -1983,10 +1880,6 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                             </button>
                             {row.status === "Pending" && (
                               <>
-                                <button onClick={() => setWhyUnmatched({ type: "sale", row })}
-                                  className={cn(actionBtnCls, "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10")} title="Why didn't this match?">
-                                  <HelpCircle className="w-4 h-4" />
-                                </button>
                                 <button onClick={() => setManualMatchSale(row)}
                                   className={cn(actionBtnCls, "text-muted-foreground hover:text-primary hover:bg-primary/10")} title="Manual match">
                                   <Link2 className="w-4 h-4" />
@@ -2081,10 +1974,6 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                               className={cn(actionBtnCls, "text-muted-foreground hover:text-primary hover:bg-primary/10")} title="Manual match with a pending sale">
                               <Link2 className="w-4 h-4" />
                             </button>
-                            <button onClick={() => setWhyUnmatched({ type: "purchase", row })}
-                              className={cn(actionBtnCls, "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10")} title="Why didn't this match?">
-                              <HelpCircle className="w-4 h-4" />
-                            </button>
                             <button onClick={() => row.id != null && handleDeleteRow("purchase", row.id)} disabled={deletingId === row.id}
                               className={cn(actionBtnCls, "text-muted-foreground hover:text-destructive hover:bg-destructive/10")} title="Delete">
                               {deletingId === row.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
@@ -2111,7 +2000,6 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
         {showAddPurchase && <AddPurchaseModal onClose={() => setShowAddPurchase(false)} onSuccess={onDataChange} />}
         {editSaleRow && <EditSaleModal row={editSaleRow} onClose={() => setEditSaleRow(null)} onSuccess={(d) => { onDataChange(d); setEditSaleRow(null); }} />}
         {editPurchaseRow && <EditPurchaseModal row={editPurchaseRow} onClose={() => setEditPurchaseRow(null)} onSuccess={(d) => { onDataChange(d); setEditPurchaseRow(null); }} />}
-        {whyUnmatched && <WhyUnmatchedModal type={whyUnmatched.type} row={whyUnmatched.row} onClose={() => setWhyUnmatched(null)} />}
         {manualMatchSale && (
           <ManualMatchModal sale={manualMatchSale} allData={data} onClose={() => setManualMatchSale(null)}
             onSuccess={(d) => { onDataChange(d); setManualMatchSale(null); }} />
