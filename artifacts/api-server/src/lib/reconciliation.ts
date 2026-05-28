@@ -28,6 +28,12 @@ export interface PurchaseRow {
   marka?: string;
 }
 
+export interface SkippedRow {
+  rowNum: number;
+  preview: string;
+  reason: string;
+}
+
 export interface ItemSummary {
   item: string;
   salesQty: number;
@@ -187,15 +193,18 @@ export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
   const markaCol = findCol(hm, "marka", "mark", "brand", "lot", "grade");
 
   const rows: Omit<SaleRow, "id">[] = [];
+  const skipped: SkippedRow[] = [];
   for (let i = 1; i < raw.length; i++) {
     const r = raw[i] as unknown[];
-    if (!r || r.length === 0) continue;
+    if (!r || r.every((c) => c == null || c === "")) continue;
+    const rowNum = i + 1;
+    const preview = r.filter((c) => c != null && c !== "").slice(0, 4).map(String).join(" | ");
     const item = normalizeStr(r[itemcol]);
-    if (!item) continue;
+    if (!item) { skipped.push({ rowNum, preview, reason: "Missing item name" }); continue; }
     const qty = normalizeNum(r[qtycol]);
-    if (qty === 0) continue;
+    if (qty === 0) { skipped.push({ rowNum, preview, reason: "Missing or zero quantity" }); continue; }
     const saleDate = normalizeDate(r[datecol]);
-    if (!saleDate) continue;
+    if (!saleDate) { skipped.push({ rowNum, preview, reason: "Missing or invalid sale date" }); continue; }
     rows.push({
       saleDate,
       item: toTitleCase(String(r[itemcol] ?? "").trim()),
@@ -210,7 +219,7 @@ export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
       marka: optStr(r, markaCol),
     });
   }
-  return rows;
+  return { rows, skipped };
 }
 
 export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
@@ -230,15 +239,18 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
   const markaCol = findCol(hm, "marka", "mark", "brand", "lot", "grade");
 
   const rows: Omit<PurchaseRow, "id">[] = [];
+  const skipped: SkippedRow[] = [];
   for (let i = 1; i < raw.length; i++) {
     const r = raw[i] as unknown[];
-    if (!r || r.length === 0) continue;
+    if (!r || r.every((c) => c == null || c === "")) continue;
+    const rowNum = i + 1;
+    const preview = r.filter((c) => c != null && c !== "").slice(0, 4).map(String).join(" | ");
     const item = normalizeStr(r[itemcol]);
-    if (!item) continue;
+    if (!item) { skipped.push({ rowNum, preview, reason: "Missing item name" }); continue; }
     const qty = normalizeNum(r[qtycol]);
-    if (qty === 0) continue;
+    if (qty === 0) { skipped.push({ rowNum, preview, reason: "Missing or zero quantity" }); continue; }
     const billDate = normalizeDate(r[billdatecol]);
-    if (!billDate) continue;
+    if (!billDate) { skipped.push({ rowNum, preview, reason: "Missing or invalid bill date" }); continue; }
     rows.push({
       billDate,
       purchaseDate: normalizeDate(r[effectivePurDateCol]),
@@ -250,7 +262,7 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
       marka: optStr(r, markaCol),
     });
   }
-  return rows;
+  return { rows, skipped };
 }
 
 const AMOUNT_TOLERANCE = 0.02;
@@ -644,15 +656,21 @@ export function buildMonthlyMatrixExcel(
 export async function parseSalesBuffer(
   buffer: Buffer,
   mimetype: string
-): Promise<Omit<SaleRow, "id">[]> {
-  if (mimetype === "application/pdf") return parseSalesPdf(buffer);
+): Promise<{ rows: Omit<SaleRow, "id">[]; skipped: SkippedRow[] }> {
+  if (mimetype === "application/pdf") {
+    const rows = await parseSalesPdf(buffer);
+    return { rows, skipped: [] };
+  }
   return parseSalesSheet(buffer);
 }
 
 export async function parsePurchaseBuffer(
   buffer: Buffer,
   mimetype: string
-): Promise<Omit<PurchaseRow, "id">[]> {
-  if (mimetype === "application/pdf") return parsePurchasePdf(buffer);
+): Promise<{ rows: Omit<PurchaseRow, "id">[]; skipped: SkippedRow[] }> {
+  if (mimetype === "application/pdf") {
+    const rows = await parsePurchasePdf(buffer);
+    return { rows, skipped: [] };
+  }
   return parsePurchaseSheet(buffer);
 }

@@ -36,6 +36,7 @@ export interface FileImportResult {
   success: boolean;
   rowCount: number;
   error?: string;
+  skippedRows?: { rowNum: number; preview: string; reason: string }[];
 }
 
 function handleDriveError(err: unknown, res: Response, fallbackMsg: string): void {
@@ -167,17 +168,18 @@ router.post(
         const allSaleRows: Omit<SaleRow, "id">[] = [];
         for (const f of files["salesFile"]) {
           try {
-            const rows = await parseSalesBuffer(f.buffer, f.mimetype);
+            const { rows, skipped } = await parseSalesBuffer(f.buffer, f.mimetype);
             if (rows.length === 0) {
               fileResults.push({
                 filename: f.originalname,
                 type: "sale",
                 success: false,
                 rowCount: 0,
-                error: "No data rows found. Check headers: Sale Date, Item, Qty, Rate, Amount",
+                skippedRows: skipped,
+                error: "No valid data rows found. Check headers: Sale Date, Item, Qty, Rate, Amount",
               });
             } else {
-              fileResults.push({ filename: f.originalname, type: "sale", success: true, rowCount: rows.length });
+              fileResults.push({ filename: f.originalname, type: "sale", success: true, rowCount: rows.length, skippedRows: skipped });
               allSaleRows.push(...rows);
             }
           } catch (e) {
@@ -225,17 +227,18 @@ router.post(
         const allPurchaseRows: Omit<PurchaseRow, "id">[] = [];
         for (const f of files["purchaseFile"]) {
           try {
-            const rows = await parsePurchaseBuffer(f.buffer, f.mimetype);
+            const { rows, skipped } = await parsePurchaseBuffer(f.buffer, f.mimetype);
             if (rows.length === 0) {
               fileResults.push({
                 filename: f.originalname,
                 type: "purchase",
                 success: false,
                 rowCount: 0,
-                error: "No data rows found. Check headers: Date, Purchase Date, Item, QTY, Rate, Amount",
+                skippedRows: skipped,
+                error: "No valid data rows found. Check headers: Date, Purchase Date, Item, QTY, Rate, Amount",
               });
             } else {
-              fileResults.push({ filename: f.originalname, type: "purchase", success: true, rowCount: rows.length });
+              fileResults.push({ filename: f.originalname, type: "purchase", success: true, rowCount: rows.length, skippedRows: skipped });
               allPurchaseRows.push(...rows);
             }
           } catch (e) {

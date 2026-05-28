@@ -35,6 +35,7 @@ interface FileImportResult {
   success: boolean;
   rowCount: number;
   error?: string;
+  skippedRows?: { rowNum: number; preview: string; reason: string }[];
 }
 
 
@@ -157,16 +158,18 @@ function useReconciliationDownloads() {
 
 /* ── File Import Results Banner ──────────────────────────────────────────────── */
 function FileImportBanner({ results, onClose }: { results: FileImportResult[]; onClose: () => void }) {
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const failed = results.filter((r) => !r.success);
   const succeeded = results.filter((r) => r.success);
   const totalRows = succeeded.reduce((sum, r) => sum + r.rowCount, 0);
+  const totalSkipped = results.reduce((sum, r) => sum + (r.skippedRows?.length ?? 0), 0);
   const allFailed = failed.length === results.length;
   const anyFailed = failed.length > 0;
 
   return (
     <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
       className={cn("rounded-xl border bg-card/80 backdrop-blur overflow-hidden",
-        allFailed ? "border-destructive/40" : anyFailed ? "border-amber-500/40" : "border-green-500/30")}>
+        allFailed ? "border-destructive/40" : anyFailed ? "border-amber-500/40" : totalSkipped > 0 ? "border-amber-500/30" : "border-green-500/30")}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-border">
         <div className="flex items-center space-x-3">
           <FileSpreadsheet className="w-4 h-4 text-primary shrink-0" />
@@ -178,6 +181,12 @@ function FileImportBanner({ results, onClose }: { results: FileImportResult[]; o
               <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 text-xs font-medium">
                 <CheckCircle2 className="w-3 h-3" />
                 <span>{succeeded.length} ok</span>
+              </span>
+            )}
+            {totalSkipped > 0 && (
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-xs font-medium">
+                <AlertTriangle className="w-3 h-3" />
+                <span>{totalSkipped} row{totalSkipped !== 1 ? "s" : ""} skipped</span>
               </span>
             )}
             {failed.length > 0 && (
@@ -193,36 +202,69 @@ function FileImportBanner({ results, onClose }: { results: FileImportResult[]; o
         </button>
       </div>
       <div className="divide-y divide-border/50">
-        {succeeded.map((r, i) => (
-          <div key={i} className="flex items-start space-x-3 px-5 py-3">
-            <CheckCircle2 className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground truncate">{r.filename}</p>
-              <p className="text-xs text-muted-foreground">{r.type === "sale" ? "Sales" : "Purchase"} · {r.rowCount} row{r.rowCount !== 1 ? "s" : ""} imported</p>
+        {results.map((r, i) => {
+          const skipped = r.skippedRows ?? [];
+          const isExpanded = expandedIdx === i;
+          return (
+            <div key={i} className={cn(r.success ? "" : "bg-destructive/5")}>
+              <div className="flex items-start space-x-3 px-5 py-3">
+                {r.success
+                  ? <CheckCircle2 className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+                  : <FileX className="w-4 h-4 text-destructive mt-0.5 shrink-0" />}
+                <div className="min-w-0 flex-1">
+                  <p className={cn("text-sm font-medium truncate", r.success ? "text-foreground" : "text-destructive")}>{r.filename}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {r.type === "sale" ? "Sales" : "Purchase"}
+                    {r.success ? ` · ${r.rowCount} row${r.rowCount !== 1 ? "s" : ""} imported` : ` · ${r.error}`}
+                    {skipped.length > 0 && (
+                      <button onClick={() => setExpandedIdx(isExpanded ? null : i)}
+                        className="ml-2 text-amber-400 font-medium hover:text-amber-300 transition-colors">
+                        {skipped.length} row{skipped.length !== 1 ? "s" : ""} skipped {isExpanded ? "▲" : "▼"}
+                      </button>
+                    )}
+                  </p>
+                </div>
+                <span className={cn("text-xs font-semibold shrink-0 mt-0.5", r.success ? "text-green-400" : "text-destructive")}>
+                  {r.success ? `${r.rowCount} rows` : "Error"}
+                </span>
+              </div>
+              {skipped.length > 0 && isExpanded && (
+                <div className="px-5 pb-3">
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-amber-500/20 bg-amber-500/10">
+                          <th className="px-3 py-2 text-left font-semibold text-amber-400 w-16">Row</th>
+                          <th className="px-3 py-2 text-left font-semibold text-amber-400">Data in row</th>
+                          <th className="px-3 py-2 text-left font-semibold text-amber-400">Reason skipped</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-amber-500/10">
+                        {skipped.map((s, si) => (
+                          <tr key={si}>
+                            <td className="px-3 py-1.5 text-amber-400/70 font-mono">{s.rowNum}</td>
+                            <td className="px-3 py-1.5 text-muted-foreground max-w-xs truncate">{s.preview || "—"}</td>
+                            <td className="px-3 py-1.5 text-amber-300">{s.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
-            <span className="text-xs font-semibold text-green-400 shrink-0 mt-0.5">{r.rowCount} rows</span>
-          </div>
-        ))}
-        {failed.map((r, i) => (
-          <div key={i} className="flex items-start space-x-3 px-5 py-3 bg-destructive/5">
-            <FileX className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-destructive truncate">{r.filename}</p>
-              <p className="text-xs text-muted-foreground">{r.type === "sale" ? "Sales" : "Purchase"} · {r.error}</p>
-            </div>
-            <span className="text-xs font-semibold text-destructive shrink-0 mt-0.5">Error</span>
-          </div>
-        ))}
+          );
+        })}
       </div>
       {succeeded.length > 0 && (
         <div className="flex items-center justify-between px-5 py-2.5 bg-muted/30 border-t border-border/50">
           <span className="text-xs text-muted-foreground">
             {totalRows} total row{totalRows !== 1 ? "s" : ""} imported across {succeeded.length} file{succeeded.length !== 1 ? "s" : ""}
           </span>
-          {anyFailed && (
+          {totalSkipped > 0 && (
             <span className="text-xs text-amber-400 font-medium flex items-center space-x-1">
               <AlertTriangle className="w-3 h-3" />
-              <span>{failed.length} file{failed.length !== 1 ? "s" : ""} skipped</span>
+              <span>{totalSkipped} row{totalSkipped !== 1 ? "s" : ""} in your file had missing data and were not imported</span>
             </span>
           )}
         </div>
