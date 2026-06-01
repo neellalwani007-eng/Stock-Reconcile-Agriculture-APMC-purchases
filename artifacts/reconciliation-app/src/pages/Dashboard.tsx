@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useDeferredValue, useRef, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRightLeft, CheckCircle2, AlertCircle, Download, LayoutDashboard, Clock,
@@ -41,6 +41,7 @@ interface FileImportResult {
 
 /* ── Constants & helpers ─────────────────────────────────────────────────────── */
 const BASE = import.meta.env.BASE_URL.replace(/\/+$/, "");
+const matchF = (val: unknown, filter: string) => !filter || String(val ?? "").toLowerCase().includes(filter.toLowerCase());
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function getCurrentFY(): string {
@@ -1686,7 +1687,37 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
   const [sf, setSf] = useState<SF>({ billDate: "", saleDate: "", item: "", qty: "", rate: "", amount: "", marka: "", status: "" });
   type PF = { billDate: string; purchaseDate: string; item: string; qty: string; rate: string; amount: string; marka: string };
   const [pf, setPf] = useState<PF>({ billDate: "", purchaseDate: "", item: "", qty: "", rate: "", amount: "", marka: "" });
-  const matchF = (val: unknown, filter: string) => !filter || String(val ?? "").toLowerCase().includes(filter.toLowerCase());
+  const deferredSf = useDeferredValue(sf);
+  const deferredPf = useDeferredValue(pf);
+
+  const filteredSalesRows = useMemo(() =>
+    data.salesRows
+      .filter((r) => activeTab === "pending" ? r.status === "Pending" : true)
+      .filter((r) =>
+        matchF(formatDate(r.purchaseBillDate ?? ""), deferredSf.billDate) &&
+        matchF(formatDate(r.saleDate), deferredSf.saleDate) &&
+        matchF(r.item, deferredSf.item) &&
+        matchF(r.qty.toFixed(2), deferredSf.qty) &&
+        matchF(r.rate, deferredSf.rate) &&
+        matchF(r.amount, deferredSf.amount) &&
+        matchF(r.marka ?? "", deferredSf.marka) &&
+        matchF(r.status, deferredSf.status)
+      )
+  , [data.salesRows, activeTab, deferredSf]);
+
+  const filteredPurchaseRows = useMemo(() =>
+    data.purchaseRows
+      .filter((r) => r.status !== "Matched")
+      .filter((r) =>
+        matchF(formatDate(r.billDate), deferredPf.billDate) &&
+        matchF(formatDate(r.purchaseDate), deferredPf.purchaseDate) &&
+        matchF(r.item, deferredPf.item) &&
+        matchF(r.qty.toFixed(2), deferredPf.qty) &&
+        matchF(r.rate, deferredPf.rate) &&
+        matchF(r.amount, deferredPf.amount) &&
+        matchF(r.marka ?? "", deferredPf.marka)
+      )
+  , [data.purchaseRows, deferredPf]);
 
   const salesDates = [...new Set(data.salesRows.map((r) => r.saleDate))].sort();
   const purchaseDates = [...new Set(data.purchaseRows.map((r) => r.billDate))].sort();
@@ -1863,10 +1894,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                 <tr>
                   <th className="px-3 py-4 w-8">
                     <button onClick={() => {
-                      const filtered = data.salesRows
-                        .filter((r) => activeTab === "pending" ? r.status === "Pending" : true)
-                        .filter((r) => matchF(formatDate(r.purchaseBillDate ?? ""), sf.billDate) && matchF(formatDate(r.saleDate), sf.saleDate) && matchF(r.item, sf.item) && matchF(r.qty.toFixed(2), sf.qty) && matchF(r.rate, sf.rate) && matchF(r.amount, sf.amount) && matchF(r.marka ?? "", sf.marka) && matchF(r.status, sf.status))
-                        .map((r) => r.id!);
+                      const filtered = filteredSalesRows.map((r) => r.id!);
                       toggleAll(filtered);
                     }} className="p-0.5 hover:text-foreground transition-colors">
                       {selectedIds.size > 0 ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4" />}
@@ -1902,10 +1930,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {data.salesRows
-                  .filter((r) => activeTab === "pending" ? r.status === "Pending" : true)
-                  .filter((r) => matchF(formatDate(r.purchaseBillDate ?? ""), sf.billDate) && matchF(formatDate(r.saleDate), sf.saleDate) && matchF(r.item, sf.item) && matchF(r.qty.toFixed(2), sf.qty) && matchF(r.rate, sf.rate) && matchF(r.amount, sf.amount) && matchF(r.marka ?? "", sf.marka) && matchF(r.status, sf.status))
-                  .map((row) => {
+                {filteredSalesRows.map((row) => {
                     const days = row.status === "Pending" ? daysSince(row.saleDate) : 0;
                     const hasLotInfo = !!(row.kpNo || row.farmerName || row.village);
                     return (
@@ -1970,9 +1995,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                       </tr>
                     );
                   })}
-                {data.salesRows
-                  .filter((r) => activeTab === "pending" ? r.status === "Pending" : true)
-                  .filter((r) => matchF(formatDate(r.purchaseBillDate ?? ""), sf.billDate) && matchF(formatDate(r.saleDate), sf.saleDate) && matchF(r.item, sf.item) && matchF(r.qty.toFixed(2), sf.qty) && matchF(r.rate, sf.rate) && matchF(r.amount, sf.amount) && matchF(r.marka ?? "", sf.marka) && matchF(r.status, sf.status)).length === 0 && (
+                {filteredSalesRows.length === 0 && (
                   <tr><td colSpan={10} className="px-6 py-10 text-center text-muted-foreground">No records found</td></tr>
                 )}
               </tbody>
@@ -1986,9 +2009,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                 <tr>
                   <th className="px-3 py-4 w-8">
                     <button onClick={() => {
-                      const filtered = data.purchaseRows.filter((r) => r.status !== "Matched")
-                        .filter((r) => matchF(formatDate(r.billDate), pf.billDate) && matchF(formatDate(r.purchaseDate), pf.purchaseDate) && matchF(r.item, pf.item) && matchF(r.qty.toFixed(2), pf.qty) && matchF(r.rate, pf.rate) && matchF(r.amount, pf.amount) && matchF(r.marka ?? "", pf.marka))
-                        .map((r) => r.id!);
+                      const filtered = filteredPurchaseRows.map((r) => r.id!);
                       toggleAll(filtered);
                     }} className="p-0.5 hover:text-foreground transition-colors">
                       {selectedIds.size > 0 ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4" />}
@@ -2015,10 +2036,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {data.purchaseRows
-                  .filter((r) => r.status !== "Matched")
-                  .filter((r) => matchF(formatDate(r.billDate), pf.billDate) && matchF(formatDate(r.purchaseDate), pf.purchaseDate) && matchF(r.item, pf.item) && matchF(r.qty.toFixed(2), pf.qty) && matchF(r.rate, pf.rate) && matchF(r.amount, pf.amount) && matchF(r.marka ?? "", pf.marka))
-                  .map((row) => {
+                {filteredPurchaseRows.map((row) => {
                     const hasNote = !!notes[String(row.id)];
                     return (
                       <tr key={row.id} className={cn("hover:bg-muted/30", selectedIds.has(row.id!) && "bg-primary/5")}>
@@ -2064,8 +2082,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                       </tr>
                     );
                   })}
-                {data.purchaseRows.filter((r) => r.status !== "Matched")
-                  .filter((r) => matchF(formatDate(r.billDate), pf.billDate) && matchF(formatDate(r.purchaseDate), pf.purchaseDate) && matchF(r.item, pf.item) && matchF(r.qty.toFixed(2), pf.qty) && matchF(r.rate, pf.rate) && matchF(r.amount, pf.amount) && matchF(r.marka ?? "", pf.marka)).length === 0 && (
+                {filteredPurchaseRows.length === 0 && (
                   <tr><td colSpan={9} className="px-6 py-10 text-center text-muted-foreground">All purchase records matched</td></tr>
                 )}
               </tbody>
