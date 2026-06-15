@@ -1719,8 +1719,8 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
       )
   , [data.purchaseRows, deferredPf]);
 
-  type MPF = { saleDate: string; item: string; marka: string; saleQty: string; purchaseBillDate: string; purchaseQty: string; qtyDiff: string };
-  const [mpf, setMpf] = useState<MPF>({ saleDate: "", item: "", marka: "", saleQty: "", purchaseBillDate: "", purchaseQty: "", qtyDiff: "" });
+  type MPF = { saleDate: string; item: string; marka: string; saleQty: string; purchaseBillDate: string; purchaseQty: string; qtyDiff: string; amtDiff: string };
+  const [mpf, setMpf] = useState<MPF>({ saleDate: "", item: "", marka: "", saleQty: "", purchaseBillDate: "", purchaseQty: "", qtyDiff: "", amtDiff: "" });
   const deferredMpf = useDeferredValue(mpf);
 
   const matchedPairs = useMemo(() => {
@@ -1770,7 +1770,8 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
       matchF(p.sale.qty.toFixed(2), deferredMpf.saleQty) &&
       matchF(formatDate(p.purchase?.billDate ?? ""), deferredMpf.purchaseBillDate) &&
       matchF(p.purchase?.qty.toFixed(2) ?? "", deferredMpf.purchaseQty) &&
-      matchF(p.qtyDiff.toFixed(2), deferredMpf.qtyDiff)
+      matchF(p.qtyDiff.toFixed(2), deferredMpf.qtyDiff) &&
+      matchF(p.amountDiff.toFixed(2), deferredMpf.amtDiff)
     )
   , [matchedPairs, deferredMpf]);
 
@@ -2095,7 +2096,10 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                     <input type="text" placeholder="Search…" value={mpf.qtyDiff} onChange={(e) => setMpf((p) => ({ ...p, qtyDiff: e.target.value }))}
                       className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
                   </th>
-                  <th className="px-2 py-1.5" />
+                  <th className="px-2 py-1.5 font-normal text-right">
+                    <input type="text" placeholder="Search…" value={mpf.amtDiff} onChange={(e) => setMpf((p) => ({ ...p, amtDiff: e.target.value }))}
+                      className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
