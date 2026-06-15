@@ -1650,7 +1650,7 @@ function ManualMatchPurchaseModal({ purchase, allData, onClose, onSuccess }: {
 }
 
 /* ── Results View ────────────────────────────────────────────────────────────── */
-type TabId = "all-sales" | "pending" | "purchase";
+type TabId = "all-sales" | "pending" | "purchase" | "matched";
 
 function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail }: {
   data: ReconciliationResult;
@@ -1719,6 +1719,42 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
       )
   , [data.purchaseRows, deferredPf]);
 
+  type MPF = { saleDate: string; item: string; marka: string; saleQty: string; purchaseQty: string; qtyDiff: string };
+  const [mpf, setMpf] = useState<MPF>({ saleDate: "", item: "", marka: "", saleQty: "", purchaseQty: "", qtyDiff: "" });
+  const deferredMpf = useDeferredValue(mpf);
+
+  const matchedPairs = useMemo(() => {
+    const pool = new Map<string, PurchaseRow[]>();
+    for (const p of data.purchaseRows) {
+      if (p.status !== "Matched") continue;
+      const key = `${p.billDate}|${p.item.toLowerCase().trim()}`;
+      if (!pool.has(key)) pool.set(key, []);
+      pool.get(key)!.push({ ...p });
+    }
+    const pairs: { sale: SaleRow; purchase: PurchaseRow | null; qtyDiff: number; amountDiff: number }[] = [];
+    for (const s of data.salesRows) {
+      if (s.status !== "Matched") continue;
+      const key = `${s.purchaseBillDate}|${s.item.toLowerCase().trim()}`;
+      const bucket = pool.get(key) ?? [];
+      const purchase = bucket.shift() ?? null;
+      const qd = purchase ? +((s.qty - purchase.qty)).toFixed(2) : s.qty;
+      const ad = purchase ? +((s.amount - purchase.amount)).toFixed(2) : s.amount;
+      pairs.push({ sale: s, purchase, qtyDiff: qd, amountDiff: ad });
+    }
+    return pairs;
+  }, [data.salesRows, data.purchaseRows]);
+
+  const filteredMatchedPairs = useMemo(() =>
+    matchedPairs.filter((p) =>
+      matchF(formatDate(p.sale.saleDate), deferredMpf.saleDate) &&
+      matchF(p.sale.item, deferredMpf.item) &&
+      matchF(p.sale.marka ?? "", deferredMpf.marka) &&
+      matchF(p.sale.qty.toFixed(2), deferredMpf.saleQty) &&
+      matchF(p.purchase?.qty.toFixed(2) ?? "", deferredMpf.purchaseQty) &&
+      matchF(p.qtyDiff.toFixed(2), deferredMpf.qtyDiff)
+    )
+  , [matchedPairs, deferredMpf]);
+
   const salesDates = [...new Set(data.salesRows.map((r) => r.saleDate))].sort();
   const purchaseDates = [...new Set(data.purchaseRows.map((r) => r.billDate))].sort();
 
@@ -1749,6 +1785,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
     { id: "pending",    label: "Pending Pavati",      shortLabel: "Pending",    count: data.pendingCount,             icon: <Clock className="w-4 h-4" /> },
     { id: "purchase",   label: "Purchase Exceptions", shortLabel: "Purchase",   count: data.unmatchedPurchaseCount,   icon: <AlertCircle className="w-4 h-4" /> },
     { id: "all-sales",  label: "All Sales",           shortLabel: "Sales",      count: data.salesRows.length,          icon: <CheckCircle2 className="w-4 h-4" /> },
+    { id: "matched",    label: "Matched Pairs",       shortLabel: "Matched",    count: matchedPairs.length,            icon: <ArrowRightLeft className="w-4 h-4" /> },
   ];
 
   const downloadBtns = [
@@ -1867,7 +1904,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
             ))}
           </div>
           <div className="flex items-center space-x-2 flex-wrap gap-y-2">
-            {selectedIds.size > 0 && (
+            {selectedIds.size > 0 && activeTab !== "matched" && (
               <button onClick={() => handleBulkDelete(activeTab === "purchase" ? "purchase" : "sale")} disabled={bulkDeleting}
                 className="flex items-center space-x-1.5 px-3 py-2 text-xs font-medium text-destructive border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 rounded-lg transition-colors disabled:opacity-50">
                 {bulkDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
@@ -1997,6 +2034,68 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                   })}
                 {filteredSalesRows.length === 0 && (
                   <tr><td colSpan={10} className="px-6 py-10 text-center text-muted-foreground">No records found</td></tr>
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* ── MATCHED PAIRS TAB ── */}
+          {activeTab === "matched" && (
+            <table className="w-full text-sm text-left relative">
+              <thead className="text-xs text-muted-foreground uppercase bg-card sticky top-0 border-b border-border shadow-sm z-10">
+                <tr>
+                  <th className="px-4 py-4 font-semibold">Sale Date</th>
+                  <th className="px-4 py-4 font-semibold">Item</th>
+                  <th className="px-4 py-4 font-semibold">Marka</th>
+                  <th className="px-4 py-4 font-semibold text-right">Sale Qty</th>
+                  <th className="px-4 py-4 font-semibold">Purchase Bill Date</th>
+                  <th className="px-4 py-4 font-semibold text-right">Purchase Qty</th>
+                  <th className="px-4 py-4 font-semibold text-right">Qty Diff</th>
+                  <th className="px-4 py-4 font-semibold text-right">Amt Diff</th>
+                </tr>
+                <tr className="bg-muted/30">
+                  {(["saleDate","item","marka","saleQty","purchaseQty","qtyDiff"] as const).map((col, i) => (
+                    <th key={col} className={cn("px-2 py-1.5 font-normal", i === 3 || i === 4 || i === 5 ? "text-right" : "")}>
+                      <input type="text" placeholder="Search…" value={mpf[col]} onChange={(e) => setMpf((p) => ({ ...p, [col]: e.target.value }))}
+                        className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                    </th>
+                  ))}
+                  <th className="px-2 py-1.5" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredMatchedPairs.map(({ sale, purchase, qtyDiff, amountDiff }) => {
+                  const hasMismatch = Math.abs(qtyDiff) >= 0.01;
+                  return (
+                    <tr key={sale.id} className={cn("hover:bg-muted/30", hasMismatch && "bg-red-950/20")}>
+                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(sale.saleDate)}</td>
+                      <td className="px-4 py-3 font-medium">{sale.item}</td>
+                      <td className="px-4 py-3">
+                        {sale.marka
+                          ? <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{sale.marka}</span>
+                          : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium">{sale.qty.toFixed(2)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                        {purchase ? formatDate(purchase.billDate) : <span className="text-destructive/60">Not found</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {purchase ? purchase.qty.toFixed(2) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className={cn("px-4 py-3 text-right font-bold", hasMismatch ? "text-red-400" : "text-green-400")}>
+                        {hasMismatch ? (qtyDiff > 0 ? "+" : "") + qtyDiff.toFixed(2) : "✓"}
+                      </td>
+                      <td className={cn("px-4 py-3 text-right", Math.abs(amountDiff) >= 1 ? "text-red-400" : "text-green-400")}>
+                        {Math.abs(amountDiff) >= 1 ? (amountDiff > 0 ? "+" : "") + formatCurrency(amountDiff) : "✓"}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredMatchedPairs.length === 0 && matchedPairs.length === 0 && (
+                  <tr><td colSpan={8} className="px-6 py-10 text-center text-muted-foreground">No matched pairs yet</td></tr>
+                )}
+                {filteredMatchedPairs.length === 0 && matchedPairs.length > 0 && (
+                  <tr><td colSpan={8} className="px-6 py-10 text-center text-muted-foreground">No records match your search</td></tr>
                 )}
               </tbody>
             </table>
