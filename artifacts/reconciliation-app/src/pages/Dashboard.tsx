@@ -1719,8 +1719,8 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
       )
   , [data.purchaseRows, deferredPf]);
 
-  type MPF = { saleDate: string; item: string; marka: string; saleQty: string; purchaseQty: string; qtyDiff: string };
-  const [mpf, setMpf] = useState<MPF>({ saleDate: "", item: "", marka: "", saleQty: "", purchaseQty: "", qtyDiff: "" });
+  type MPF = { saleDate: string; item: string; marka: string; saleQty: string; purchaseBillDate: string; purchaseQty: string; qtyDiff: string };
+  const [mpf, setMpf] = useState<MPF>({ saleDate: "", item: "", marka: "", saleQty: "", purchaseBillDate: "", purchaseQty: "", qtyDiff: "" });
   const deferredMpf = useDeferredValue(mpf);
 
   const matchedPairs = useMemo(() => {
@@ -1736,7 +1736,17 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
       if (s.status !== "Matched") continue;
       const key = `${s.purchaseBillDate}|${s.item.toLowerCase().trim()}`;
       const bucket = pool.get(key) ?? [];
-      const purchase = bucket.shift() ?? null;
+      let purchase: PurchaseRow | null = null;
+      if (bucket.length > 0) {
+        let bestIdx = 0;
+        let bestDiff = Math.abs(bucket[0].qty - s.qty);
+        for (let i = 1; i < bucket.length; i++) {
+          const d = Math.abs(bucket[i].qty - s.qty);
+          if (d < bestDiff) { bestDiff = d; bestIdx = i; }
+        }
+        purchase = bucket[bestIdx];
+        bucket.splice(bestIdx, 1);
+      }
       const qd = purchase ? +((s.qty - purchase.qty)).toFixed(2) : s.qty;
       const ad = purchase ? +((s.amount - purchase.amount)).toFixed(2) : s.amount;
       pairs.push({ sale: s, purchase, qtyDiff: qd, amountDiff: ad });
@@ -1750,6 +1760,7 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
       matchF(p.sale.item, deferredMpf.item) &&
       matchF(p.sale.marka ?? "", deferredMpf.marka) &&
       matchF(p.sale.qty.toFixed(2), deferredMpf.saleQty) &&
+      matchF(formatDate(p.purchase?.billDate ?? ""), deferredMpf.purchaseBillDate) &&
       matchF(p.purchase?.qty.toFixed(2) ?? "", deferredMpf.purchaseQty) &&
       matchF(p.qtyDiff.toFixed(2), deferredMpf.qtyDiff)
     )
@@ -2054,12 +2065,28 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                   <th className="px-4 py-4 font-semibold text-right">Amt Diff</th>
                 </tr>
                 <tr className="bg-muted/30">
-                  {(["saleDate","item","marka","saleQty","purchaseQty","qtyDiff"] as const).map((col, i) => (
-                    <th key={col} className={cn("px-2 py-1.5 font-normal", i === 3 || i === 4 || i === 5 ? "text-right" : "")}>
+                  {(["saleDate","item","marka"] as const).map((col) => (
+                    <th key={col} className="px-2 py-1.5 font-normal">
                       <input type="text" placeholder="Search…" value={mpf[col]} onChange={(e) => setMpf((p) => ({ ...p, [col]: e.target.value }))}
                         className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
                     </th>
                   ))}
+                  <th className="px-2 py-1.5 font-normal text-right">
+                    <input type="text" placeholder="Search…" value={mpf.saleQty} onChange={(e) => setMpf((p) => ({ ...p, saleQty: e.target.value }))}
+                      className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </th>
+                  <th className="px-2 py-1.5 font-normal">
+                    <input type="text" placeholder="Search…" value={mpf.purchaseBillDate} onChange={(e) => setMpf((p) => ({ ...p, purchaseBillDate: e.target.value }))}
+                      className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </th>
+                  <th className="px-2 py-1.5 font-normal text-right">
+                    <input type="text" placeholder="Search…" value={mpf.purchaseQty} onChange={(e) => setMpf((p) => ({ ...p, purchaseQty: e.target.value }))}
+                      className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </th>
+                  <th className="px-2 py-1.5 font-normal text-right">
+                    <input type="text" placeholder="Search…" value={mpf.qtyDiff} onChange={(e) => setMpf((p) => ({ ...p, qtyDiff: e.target.value }))}
+                      className="w-full px-2 py-1 text-xs font-normal normal-case rounded border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </th>
                   <th className="px-2 py-1.5" />
                 </tr>
               </thead>
