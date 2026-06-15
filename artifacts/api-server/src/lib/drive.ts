@@ -41,6 +41,7 @@ export interface DrSaleRecord {
   village?: string;
   status: "Pending" | "Matched";
   purchaseBillDate: string | null;
+  matchedPurchaseId?: number;
   marka?: string;
 }
 

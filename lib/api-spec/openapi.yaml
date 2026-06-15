@@ -378,9 +378,24 @@ components:
         purchaseBillDate:
           type: string
           nullable: true
+        matchedPurchaseId:
+          type: integer
+          nullable: true
         status:
           type: string
           enum: [Matched, Pending]
+        kpNo:
+          type: string
+          nullable: true
+        farmerName:
+          type: string
+          nullable: true
+        village:
+          type: string
+          nullable: true
+        marka:
+          type: string
+          nullable: true
       required: [saleDate, item, qty, rate, amount, status]
 
     PurchaseRow:
@@ -403,6 +418,9 @@ components:
         status:
           type: string
           enum: [Matched, Unmatched, Extra]
+        marka:
+          type: string
+          nullable: true
       required: [billDate, purchaseDate, item, qty, rate, amount, status]
 
     ItemSummary:

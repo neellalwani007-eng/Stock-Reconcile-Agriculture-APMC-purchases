@@ -91,10 +91,12 @@ export interface SaleRow {
   rate: number;
   amount: number;
   purchaseBillDate?: string | null;
+  matchedPurchaseId?: number | null;
   status: SaleRowStatus;
   kpNo?: string | null;
   farmerName?: string | null;
   village?: string | null;
+  marka?: string | null;
 }
 
 export type PurchaseRowStatus =
@@ -115,6 +117,7 @@ export interface PurchaseRow {
   rate: number;
   amount: number;
   status: PurchaseRowStatus;
+  marka?: string | null;
 }
 
 export interface ItemSummary {

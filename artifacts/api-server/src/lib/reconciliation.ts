@@ -9,6 +9,7 @@ export interface SaleRow {
   rate: number;
   amount: number;
   purchaseBillDate: string | null;
+  matchedPurchaseId?: number;
   status: "Matched" | "Pending";
   kpNo?: string;
   farmerName?: string;

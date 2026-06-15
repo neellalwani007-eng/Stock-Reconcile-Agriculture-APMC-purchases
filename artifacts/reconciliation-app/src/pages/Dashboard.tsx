@@ -1724,6 +1724,10 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
   const deferredMpf = useDeferredValue(mpf);
 
   const matchedPairs = useMemo(() => {
+    const purchaseById = new Map<number, PurchaseRow>();
+    for (const p of data.purchaseRows) {
+      if (p.id != null) purchaseById.set(p.id, p);
+    }
     const pool = new Map<string, PurchaseRow[]>();
     for (const p of data.purchaseRows) {
       if (p.status !== "Matched") continue;
@@ -1734,18 +1738,22 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
     const pairs: { sale: SaleRow; purchase: PurchaseRow | null; qtyDiff: number; amountDiff: number }[] = [];
     for (const s of data.salesRows) {
       if (s.status !== "Matched") continue;
-      const key = `${s.purchaseBillDate}|${s.item.toLowerCase().trim()}`;
-      const bucket = pool.get(key) ?? [];
       let purchase: PurchaseRow | null = null;
-      if (bucket.length > 0) {
-        let bestIdx = 0;
-        let bestDiff = Math.abs(bucket[0].qty - s.qty);
-        for (let i = 1; i < bucket.length; i++) {
-          const d = Math.abs(bucket[i].qty - s.qty);
-          if (d < bestDiff) { bestDiff = d; bestIdx = i; }
+      if (s.matchedPurchaseId != null) {
+        purchase = purchaseById.get(s.matchedPurchaseId) ?? null;
+      } else {
+        const key = `${s.purchaseBillDate}|${s.item.toLowerCase().trim()}`;
+        const bucket = pool.get(key) ?? [];
+        if (bucket.length > 0) {
+          let bestIdx = 0;
+          let bestDiff = Math.abs(bucket[0].qty - s.qty);
+          for (let i = 1; i < bucket.length; i++) {
+            const d = Math.abs(bucket[i].qty - s.qty);
+            if (d < bestDiff) { bestDiff = d; bestIdx = i; }
+          }
+          purchase = bucket[bestIdx];
+          bucket.splice(bestIdx, 1);
         }
-        purchase = bucket[bestIdx];
-        bucket.splice(bestIdx, 1);
       }
       const qd = purchase ? +((s.qty - purchase.qty)).toFixed(2) : s.qty;
       const ad = purchase ? +((s.amount - purchase.amount)).toFixed(2) : s.amount;

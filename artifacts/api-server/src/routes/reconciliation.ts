@@ -56,10 +56,12 @@ function drSaleToRow(r: DrSaleRecord): SaleRow {
     rate: parseFloat(r.rate),
     amount: parseFloat(r.amount),
     purchaseBillDate: r.purchaseBillDate,
+    matchedPurchaseId: r.matchedPurchaseId,
     status: r.status,
     kpNo: r.kpNo,
     farmerName: r.farmerName,
     village: r.village,
+    marka: r.marka,
   };
 }
 
@@ -132,7 +134,7 @@ async function runMatchingForUser(
   for (const { saleId, purchaseId, purchaseBillDate } of updates) {
     const sale = data.sales.find((s) => s.id === saleId);
     const purchase = data.purchases.find((p) => p.id === purchaseId);
-    if (sale) { sale.status = "Matched"; sale.purchaseBillDate = purchaseBillDate; }
+    if (sale) { sale.status = "Matched"; sale.purchaseBillDate = purchaseBillDate; sale.matchedPurchaseId = purchaseId; }
     if (purchase) purchase.status = "Matched";
   }
 
@@ -701,6 +703,7 @@ router.post("/manual-match", async (req: Request, res: Response) => {
 
     sale.status = "Matched";
     sale.purchaseBillDate = purchase.billDate;
+    sale.matchedPurchaseId = purchase.id;
     purchase.status = "Matched";
 
     await saveDataToDrive(authedReq, data);
