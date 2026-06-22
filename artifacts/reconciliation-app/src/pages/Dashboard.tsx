@@ -1775,6 +1775,17 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
     )
   , [matchedPairs, deferredMpf]);
 
+  const mpTotals = useMemo(() => {
+    let saleQty = 0, purchaseQty = 0, qtyDiff = 0, amountDiff = 0;
+    for (const p of filteredMatchedPairs) {
+      saleQty += p.sale.qty;
+      purchaseQty += p.purchase?.qty ?? 0;
+      qtyDiff += p.qtyDiff;
+      amountDiff += p.amountDiff;
+    }
+    return { saleQty, purchaseQty, qtyDiff, amountDiff };
+  }, [filteredMatchedPairs]);
+
   const salesDates = [...new Set(data.salesRows.map((r) => r.saleDate))].sort();
   const purchaseDates = [...new Set(data.purchaseRows.map((r) => r.billDate))].sort();
 
@@ -2137,6 +2148,26 @@ function ResultsView({ data, onDataChange, selectedFY, selectedMonths, userEmail
                   <tr><td colSpan={8} className="px-6 py-10 text-center text-muted-foreground">No records match your search</td></tr>
                 )}
               </tbody>
+              <tfoot className="sticky bottom-0 z-10 bg-card border-t-2 border-primary/40 text-xs uppercase">
+                <tr>
+                  <td className="px-4 py-3 font-bold text-primary tracking-wide" colSpan={3}>
+                    Totals ({filteredMatchedPairs.length} pairs)
+                  </td>
+                  <td className="px-4 py-3 text-right font-bold text-foreground">
+                    {mpTotals.saleQty.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3" />
+                  <td className="px-4 py-3 text-right font-bold text-foreground">
+                    {mpTotals.purchaseQty.toFixed(2)}
+                  </td>
+                  <td className={cn("px-4 py-3 text-right font-bold", Math.abs(mpTotals.qtyDiff) >= 0.01 ? "text-red-400" : "text-green-400")}>
+                    {Math.abs(mpTotals.qtyDiff) >= 0.01 ? (mpTotals.qtyDiff > 0 ? "+" : "") + mpTotals.qtyDiff.toFixed(2) : "✓"}
+                  </td>
+                  <td className={cn("px-4 py-3 text-right font-bold", Math.abs(mpTotals.amountDiff) >= 1 ? "text-red-400" : "text-green-400")}>
+                    {Math.abs(mpTotals.amountDiff) >= 1 ? (mpTotals.amountDiff > 0 ? "+" : "") + formatCurrency(mpTotals.amountDiff) : "✓"}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           )}
 
