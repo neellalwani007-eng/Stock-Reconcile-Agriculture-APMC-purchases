@@ -149,6 +149,19 @@ export function normalizeStr(val: unknown): string {
   return String(val).normalize("NFC").trim().toLowerCase();
 }
 
+function isReasonableDate(date: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
+}
+
 function toTitleCase(str: string): string {
   return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -205,7 +218,7 @@ export function parseSalesSheet(buffer: Buffer): Omit<SaleRow, "id">[] {
     const qty = normalizeNum(r[qtycol]);
     if (qty === 0) { skipped.push({ rowNum, preview, reason: "Missing or zero quantity" }); continue; }
     const saleDate = normalizeDate(r[datecol]);
-    if (!saleDate) { skipped.push({ rowNum, preview, reason: "Missing or invalid sale date" }); continue; }
+    if (!isReasonableDate(saleDate)) { skipped.push({ rowNum, preview, reason: "Missing or invalid sale date (expected 2000–2100)" }); continue; }
     rows.push({
       saleDate,
       item: toTitleCase(String(r[itemcol] ?? "").trim()),
@@ -251,10 +264,12 @@ export function parsePurchaseSheet(buffer: Buffer): Omit<PurchaseRow, "id">[] {
     const qty = normalizeNum(r[qtycol]);
     if (qty === 0) { skipped.push({ rowNum, preview, reason: "Missing or zero quantity" }); continue; }
     const billDate = normalizeDate(r[billdatecol]);
-    if (!billDate) { skipped.push({ rowNum, preview, reason: "Missing or invalid bill date" }); continue; }
+    const purchaseDate = normalizeDate(r[effectivePurDateCol]);
+    if (!isReasonableDate(billDate)) { skipped.push({ rowNum, preview, reason: "Missing or invalid bill date (expected 2000–2100)" }); continue; }
+    if (!isReasonableDate(purchaseDate)) { skipped.push({ rowNum, preview, reason: "Missing or invalid purchase date (expected 2000–2100)" }); continue; }
     rows.push({
       billDate,
-      purchaseDate: normalizeDate(r[effectivePurDateCol]),
+      purchaseDate,
       item: toTitleCase(String(r[itemcol] ?? "").trim()),
       qty,
       rate: normalizeNum(r[ratecol]),

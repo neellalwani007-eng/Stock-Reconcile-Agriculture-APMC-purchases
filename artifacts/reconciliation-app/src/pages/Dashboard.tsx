@@ -75,6 +75,80 @@ function daysSince(dateStr: string): number {
   return Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+type AuditIssue = {
+  type: "sale" | "purchase";
+  id: number;
+  title: string;
+  detail: string;
+};
+
+function isValidStoredDate(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function auditIssues(result: ReconciliationResult | null | undefined): AuditIssue[] {
+  if (!result) return [];
+  const purchaseIds = new Set(result.purchaseRows.map((p) => p.id).filter((id): id is number => id != null));
+  const issues: AuditIssue[] = [];
+
+  for (const sale of result.salesRows) {
+    if (sale.id == null) continue;
+    if (!isValidStoredDate(sale.saleDate)) {
+      issues.push({
+        type: "sale",
+        id: sale.id,
+        title: `Sale #${sale.id}: invalid sale date`,
+        detail: `Stored date “${sale.saleDate || "blank"}” is not a valid date in the expected range.`,
+      });
+    } else if (!sale.item.trim()) {
+      issues.push({ type: "sale", id: sale.id, title: `Sale #${sale.id}: missing item`, detail: "The sale has no item name." });
+    } else if (!Number.isFinite(sale.qty) || sale.qty <= 0) {
+      issues.push({ type: "sale", id: sale.id, title: `Sale #${sale.id}: invalid quantity`, detail: "The sale quantity is missing, zero, or invalid." });
+    }
+    if (sale.status === "Matched" && sale.matchedPurchaseId != null && !purchaseIds.has(sale.matchedPurchaseId)) {
+      issues.push({
+        type: "sale",
+        id: sale.id,
+        title: `Sale #${sale.id}: broken purchase link`,
+        detail: `This sale points to purchase #${sale.matchedPurchaseId}, but that purchase no longer exists.`,
+      });
+    }
+  }
+
+  for (const purchase of result.purchaseRows) {
+    if (purchase.id == null) continue;
+    if (!isValidStoredDate(purchase.billDate)) {
+      issues.push({
+        type: "purchase",
+        id: purchase.id,
+        title: `Purchase #${purchase.id}: invalid bill date`,
+        detail: `Stored bill date “${purchase.billDate || "blank"}” is not a valid date in the expected range.`,
+      });
+    } else if (!isValidStoredDate(purchase.purchaseDate)) {
+      issues.push({
+        type: "purchase",
+        id: purchase.id,
+        title: `Purchase #${purchase.id}: invalid purchase date`,
+        detail: `Stored purchase date “${purchase.purchaseDate || "blank"}” is not a valid date in the expected range.`,
+      });
+    } else if (!purchase.item.trim()) {
+      issues.push({ type: "purchase", id: purchase.id, title: `Purchase #${purchase.id}: missing item`, detail: "The purchase has no item name." });
+    } else if (!Number.isFinite(purchase.qty) || purchase.qty <= 0) {
+      issues.push({ type: "purchase", id: purchase.id, title: `Purchase #${purchase.id}: invalid quantity`, detail: "The purchase quantity is missing, zero, or invalid." });
+    }
+  }
+
+  return issues;
+}
+
 function filterResultByFY(result: ReconciliationResult, fy: string): ReconciliationResult {
   // Rows with empty/unparseable dates are always included so the user can see and delete them
   const sales = result.salesRows.filter((r) => !r.saleDate || getFYFromDate(r.saleDate) === fy);
@@ -1649,6 +1723,75 @@ function ManualMatchPurchaseModal({ purchase, allData, onClose, onSuccess }: {
   );
 }
 
+/* ── Data Issues Modal ───────────────────────────────────────────────────────── */
+function DataIssuesModal({ issues, onClose, onDataChange }: {
+  issues: AuditIssue[];
+  onClose: () => void;
+  onDataChange: (d: ReconciliationResult) => void;
+}) {
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const handleDelete = async (issue: AuditIssue) => {
+    const recordLabel = issue.type === "purchase" ? "purchase" : "sale";
+    if (!confirm(`Delete this ${recordLabel} record?\n\n${issue.title}`)) return;
+    const key = `${issue.type}-${issue.id}`;
+    setDeleting(key);
+    try {
+      const result = await apiFetch(`/records/${issue.type}/${issue.id}`, { method: "DELETE" });
+      onDataChange(result);
+    } catch {
+      alert("Failed to delete record.");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-card rounded-2xl border border-border shadow-2xl overflow-hidden">
+        <div className="flex items-start justify-between p-6 border-b border-border">
+          <div>
+            <h2 className="text-lg font-display font-bold text-foreground flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-400" /> Review data issues
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              These records need attention. Normal duplicate lots and amount differences are not included.
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Close">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="overflow-y-auto p-6 space-y-3">
+          {issues.map((issue) => {
+            const key = `${issue.type}-${issue.id}`;
+            return (
+              <div key={`${key}-${issue.title}`} className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground text-sm">{issue.title}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{issue.detail}</p>
+                  </div>
+                  <button onClick={() => handleDelete(issue)} disabled={deleting === key}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-destructive border border-destructive/25 hover:bg-destructive/10 disabled:opacity-50 transition-colors">
+                    {deleting === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="p-6 pt-3 border-t border-border flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">{issues.length} issue{issues.length === 1 ? "" : "s"} found across saved records.</p>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-border text-foreground hover:bg-muted transition-colors font-medium text-sm">Close</button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 /* ── Results View ────────────────────────────────────────────────────────────── */
 type TabId = "all-sales" | "pending" | "purchase" | "matched";
 
@@ -2340,6 +2483,7 @@ export default function Dashboard() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [showFormatGuide, setShowFormatGuide] = useState(false);
+  const [showDataIssues, setShowDataIssues] = useState(false);
   const [selectedFY, setSelectedFY] = useState<string>(getCurrentFY());
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [subStatus, setSubStatus] = useState<SubscriptionStatus | null>(null);
@@ -2398,6 +2542,13 @@ export default function Dashboard() {
   const rawReportsData = liveReportsData ?? reportsData;
   const fyReportsData = rawReportsData ? filterResultByFY(rawReportsData, selectedFY) : null;
   const fyUploadData = uploadResult ? filterResultByFY(uploadResult, selectedFY) : null;
+  const auditData = appMode === "reports" ? rawReportsData : uploadResult;
+  const issues = useMemo(() => auditIssues(auditData), [auditData]);
+
+  const handleAuditDataChange = (nextData: ReconciliationResult) => {
+    if (appMode === "reports") setLiveReportsData(nextData);
+    else setUploadResult(nextData);
+  };
 
   const availableMonths = [...new Set([
     ...(fyReportsData?.salesRows.map((r) => monthKey(r.saleDate)) ?? []),
@@ -2423,6 +2574,11 @@ export default function Dashboard() {
             {appMode === "upload" && uploadResult && (
               <button onClick={handleNewUpload} className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted rounded-lg transition-colors">
                 <RefreshCcw className="w-4 h-4" /><span className="hidden sm:inline">New Upload</span>
+              </button>
+            )}
+            {issues.length > 0 && (
+              <button onClick={() => setShowDataIssues(true)} className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-amber-400 border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 rounded-lg transition-colors">
+                <AlertTriangle className="w-4 h-4" /><span className="hidden sm:inline">Review Issues</span><span className="text-xs">({issues.length})</span>
               </button>
             )}
             <div className="relative flex items-center">
@@ -2599,6 +2755,13 @@ export default function Dashboard() {
           )}
         </AnimatePresence>
       </main>
+      {showDataIssues && (
+        <DataIssuesModal
+          issues={issues}
+          onClose={() => setShowDataIssues(false)}
+          onDataChange={handleAuditDataChange}
+        />
+      )}
     </div>
   );
 }

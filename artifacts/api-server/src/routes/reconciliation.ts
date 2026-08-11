@@ -121,6 +121,7 @@ async function runMatchingForUser(
     if (s.status === "Matched") {
       s.status = "Pending";
       s.purchaseBillDate = null;
+      s.matchedPurchaseId = undefined;
     }
   }
   for (const p of data.purchases) {
@@ -503,7 +504,9 @@ router.delete("/records/sale/:id", async (req: Request, res: Response) => {
     if (idx === -1) { res.status(404).json({ error: "Record not found." }); return; }
     const existing = data.sales[idx];
     if (existing.status === "Matched" && existing.purchaseBillDate) {
-      const linked = data.purchases.find((p) => p.status === "Matched" && p.billDate === existing.purchaseBillDate && p.item === existing.item && p.qty === existing.qty);
+      const linked = existing.matchedPurchaseId != null
+        ? data.purchases.find((p) => p.id === existing.matchedPurchaseId)
+        : data.purchases.find((p) => p.status === "Matched" && p.billDate === existing.purchaseBillDate && p.item === existing.item && p.qty === existing.qty);
       if (linked) linked.status = "Unmatched";
     }
     data.sales.splice(idx, 1);
@@ -546,7 +549,9 @@ router.delete("/records/bulk", async (req: Request, res: Response) => {
     if (type === "sale") {
       for (const s of data.sales.filter((s) => idSet.has(s.id))) {
         if (s.status === "Matched" && s.purchaseBillDate) {
-          const linked = data.purchases.find((p) => p.status === "Matched" && p.billDate === s.purchaseBillDate && p.item === s.item && p.qty === s.qty);
+          const linked = s.matchedPurchaseId != null
+            ? data.purchases.find((p) => p.id === s.matchedPurchaseId)
+            : data.purchases.find((p) => p.status === "Matched" && p.billDate === s.purchaseBillDate && p.item === s.item && p.qty === s.qty);
           if (linked) linked.status = "Unmatched";
         }
       }
