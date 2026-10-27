@@ -61,12 +61,12 @@ router.get("/users", async (_req: Request, res: Response) => {
       })
     );
 
-    res.json(withStatus);
-  } catch {
-    res.status(500).json({ error: "Failed to list users" });
+  res.json(withStatus);
+  } catch (err: any) {
+    console.error("list users failed:", err);
+    res.status(500).json({ error: "Failed to list users", detail: err?.message });
   }
 });
-
 router.put("/users/:userId/license/:subscriptionId/payment", async (req: Request, res: Response) => {
   const userId = getRouteParam(req.params.userId);
   const subscriptionId = getRouteParam(req.params.subscriptionId);
