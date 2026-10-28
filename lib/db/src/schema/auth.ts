@@ -33,8 +33,6 @@ export const subscriptionsTable = pgTable("subscriptions", {
   durationYears: integer("duration_years").notNull().default(1),
   activatedOn: timestamp("activated_on", { withTimezone: true }).notNull(),
   expiresOn: timestamp("expires_on", { withTimezone: true }).notNull(),
-  paymentSource: varchar("payment_source", { length: 160 }),
-  paymentReference: varchar("payment_reference", { length: 200 }),
   issuedBy: varchar("issued_by").default("admin"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
