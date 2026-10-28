@@ -29,7 +29,7 @@ router.use((req: Request, res: Response, next) => {
   next();
 });
 
-router.get("/users", async (_req: Request, res: Response) => {
+router.get("/users", async (req: Request, res: Response) => {
   try {
     const users = await db
       .select({
@@ -62,7 +62,8 @@ router.get("/users", async (_req: Request, res: Response) => {
     );
 
     res.json(withStatus);
-  } catch {
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to list admin users");
     res.status(500).json({ error: "Failed to list users" });
   }
 });

@@ -69,9 +69,14 @@ export default function AdminPage() {
     try {
       const res = await fetch(`${BASE}/api/admin/users`, { credentials: "include" });
       if (res.status === 404) { setError("Access denied."); setLoading(false); return; }
-      if (!res.ok) throw new Error("Failed to load");
+      if (!res.ok) {
+        setError(`The server returned an error (${res.status}). Check the server logs and database migration.`);
+        return;
+      }
       setUsers(await res.json());
-    } catch { setError("Failed to load users. Make sure ADMIN_EMAIL is set correctly."); }
+    } catch {
+      setError("Could not reach the server. Check the API service.");
+    }
     finally { setLoading(false); }
   };
 

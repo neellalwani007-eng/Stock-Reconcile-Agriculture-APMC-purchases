@@ -48,16 +48,17 @@ The migration command is:
 pnpm --filter @workspace/db run migrate
 ```
 
-Before deploying the updated app, apply pending migrations using the Render
-database URL. On a paid Render web service, set the pre-deploy command to the
-migration command above so future migrations run before the new app starts.
-Render only provides pre-deploy commands on paid web services.
+The Blueprint's start command runs pending migrations before starting the API.
+For an existing Render service, update its **Start Command** to:
 
-For plans without pre-deploy commands, run the migration from a trusted shell
-with `DATABASE_URL` set to the database's external connection URL, before
-deploying the schema-dependent code. For the running app, set `DATABASE_URL` to
+```sh
+pnpm --filter @workspace/db run migrate && node --enable-source-maps --max-old-space-size=400 ./artifacts/api-server/dist/index.mjs
+```
+
+This command uses the service's existing `DATABASE_URL`. Set that variable to
 the Render database's internal connection URL; the database and web service
-must be in the same Render workspace and region for that URL to work.
+must be in the same Render workspace and region for that URL to work. The
+migration runner skips migrations already applied.
 
 The migration is additive and idempotent. It updates the schema only; it does
 not copy data from a different database. Keep real database URLs and OAuth
@@ -68,7 +69,7 @@ credentials in Render's secret settings, never in GitHub.
 The Blueprint uses:
 
 - Build: `pnpm install --frozen-lockfile --prod=false && pnpm run build`
-- Start: `pnpm --filter @workspace/api-server run start`
+- Start: run the migration command above, then start the API server
 - Health check: `/api/healthz`
 
 Render supplies `PORT` to the API server. No separate static-site service is
